@@ -1,75 +1,73 @@
-## AI 运维助手（AIOps Agent）
+# AI 运维助手（AIOps Agent）
 
-> 智能运维助手：集成实时监控、告警、RAG 检索与大模型推理的运维自动化与问答平台。
+> 智能运维助手：整合实时监控、告警、RAG 检索与大模型推理，支持交互式排查与自动化响应。
 
-本仓库包含后端服务、前端控制台、模型与检索索引管理、以及训练/评估工具。该 README 提供快速上手、开发与部署说明，便于直接上传到 GitHub 作为项目主页文档。
+![license](https://img.shields.io/badge/license-MIT-blue) ![python](https://img.shields.io/badge/python-3.10%2B-brightgreen) ![vite](https://img.shields.io/badge/frontend-Vite-orange)
 
-**主要特性**
-- 实时监控面板与告警展示
-- 基于 RAG（检索增强生成）的知识库检索与故障案例引用
-- 可交互的 ReAct 风格运维智能代理（CLI 与 API）
-- 支持 LoRA 微调、模型合并与评估基准
-- Docker 化部署示例，集成 Prometheus、Alertmanager、Elasticsearch、Postgres
+本文档以实践为导向，目标是让开发者能快速在本地或测试环境运行完整栈（后端 + 前端 + 依赖服务），并包含部署与排查要点。
 
-**目录概览**
-- [main.py](main.py) - 项目入口脚本，支持多种运行模式（api / cli / data-gen / finetune / merge / eval / rag-bench / build-index）
-- [requirements.txt](requirements.txt) - Python 依赖列表
-- [frontend/](frontend/) - React + Vite 前端源码（控制台 UI）
-- [docker/docker-compose.yaml](docker/docker-compose.yaml) - 整体服务编排示例（包含模型容器、prometheus、elasticsearch、postgres 等）
-- [docker/Dockerfile](docker/Dockerfile) - 后端镜像构建文件（示例，基于 CUDA 镜像）
-- [config/settings.py](config/settings.py) - 配置与环境变量处理（默认路径、端口、模型位置等）
-- [models/](models/) - 建议存放本地模型权重（示例：qwen、bge）
-- [rag/](rag/) - 知识库与向量存储目录（检索索引）
-- [finetune/](finetune/) - LoRA 微调工具与配置
-- [api/](api/) - FastAPI 服务初始化与路由
-- [tools/](tools/) - 各类运维工具插件（Prometheus、SSH、Elasticsearch 等）
+目录（快速跳转）
+- 概览
+- 功能亮点
+- 技术栈
+- 快速上手
+- 配置与环境变量
+- 运行模式与示例命令
+- 前端开发与构建
+- 架构图（概览）
+- 部署（Docker / 生产注意）
+- 测试与 CI 建议
+- 常见问题与排查
+- 目录与文件说明
+- 贡献指南与许可
 
-快速开始
-----------
+-------------------------
 
-以下说明假定你在 Windows、Linux 或 macOS 上本地开发环境中操作；另有 Docker 部署部分供生产或集成环境使用。
+## 功能亮点
 
-1. 克隆仓库
+- 实时监控展示：通过 Prometheus 数据源绘制趋势并支持面板检索。
+- 告警与自动化：接入 Alertmanager，支持基于 LLM 的自动化建议与执行（可选 SSH 执行）。
+- RAG 问答：本地知识库 + 向量检索，结合大模型生成可解释性回答与定位建议。
+- 可扩展工具链：`tools/` 目录包含 Prometheus、SSH、ES、SQL 等封装，便于扩展自定义工具。
+
+## 技术栈（概要）
+
+- 后端：Python, FastAPI
+- Agent / RAG：LangChain 风格的代理实现；向量索引存储于 `rag/vectorstore`（本地实现）
+- 模型：支持本地模型推理（QWEN 等）与 Embedding（BGE）；LoRA 微调在 `finetune/` 下
+- 前端：React + TypeScript + Vite，图表使用 ECharts，UI 组件来自项目内 `frontend/src/components`
+- 数据与搜索：Postgres（元数据）、Elasticsearch（可选）、Prometheus（监控）
+
+## 快速上手（本地开发）
+
+1) 克隆仓库并进入：
 
 ```bash
 git clone <your-repo-url>
 cd AI运维助手
 ```
 
-2. 创建 Python 虚拟环境并安装依赖
+2) 后端依赖（推荐 virtualenv）：
 
 ```bash
 python -m venv .venv
 # Windows
-.venv\Scripts\activate
+.venv\\Scripts\\activate
 # macOS / Linux
 source .venv/bin/activate
-
 pip install -r requirements.txt
 ```
 
-3. 配置环境变量
-
-复制或编辑 `config/.env`（如果不存在，可在 `config/` 下创建），常见变量：
-
-- `QWEN_MODEL_PATH`：Qwen 模型路径或 Hugging Face 名称
-- `BGE_MODEL_PATH`：BGE Embedding 模型路径或名称
-- `DATABASE_URL`：Postgres 连接字符串
-- `PROMETHEUS_URL`, `ALERTMANAGER_URL`, `ELASTICSEARCH_URL`
-- `API_HOST`, `API_PORT`
-
-默认值见 [config/settings.py](config/settings.py)。如果使用 Docker Compose，许多变量可在 `docker/docker-compose.yaml` 中通过环境注入。
-
-4. 运行后端 API（开发快速启动）
+3) 启动开发环境（示例：不启用真实模型，仅运行 API）：
 
 ```bash
-# 以 API 模式启动
+# 启动 API
 python main.py --mode api
+# 检查健康
+curl http://127.0.0.1:8000/health
 ```
 
-默认监听端口由 `API_PORT` 控制，默认为 `8000`。
-
-5. 运行前端（控制台 UI）
+4) 启动前端控制台：
 
 ```bash
 cd frontend
@@ -77,88 +75,171 @@ npm install
 npm run dev
 ```
 
-开发时前端默认使用 Vite 的 dev server（HMR 支持）。构建生产包：`npm run build`。
+访问：默认前端 dev server 通常在 `http://localhost:5173`（或终端输出的端口）。
 
-Docker 化部署（示例）
-------------------
+## 配置与环境变量（建议写入 `config/.env`）
 
-仓库提供一个示例 `docker/docker-compose.yaml`，包含后端、Prometheus、Alertmanager、Elasticsearch 与 Postgres。该 compose 文件默认把后端端口映射到 `8000`。
+下面列出常用变量与说明：
+
+| 变量 | 说明 | 示例 |
+|---|---:|---|
+| QWEN_MODEL_PATH | 推理模型路径或 HF 名称 | models/qwen-1.5b |
+| BGE_MODEL_PATH | Embedding 模型路径 | models/bge-large-zh-v1.5 |
+| DATABASE_URL | Postgres 连接字符串 | postgresql://user:pass@localhost:5432/cmdb |
+| PROMETHEUS_URL | Prometheus HTTP 地址 | http://localhost:9090 |
+| ALERTMANAGER_URL | Alertmanager 地址 | http://localhost:9093 |
+| ELASTICSEARCH_URL | Elasticsearch 地址 | http://localhost:9200 |
+| RAG_VECTORSTORE_DIR | 向量库存放目录 | ./rag/vectorstore |
+| RAG_KNOWLEDGE_DIR | 知识文档目录 | ./rag/knowledge |
+| API_HOST / API_PORT | 后端绑定地址与端口 | 0.0.0.0 / 8000 |
+
+更多默认与解析规则请参见 `config/settings.py`。
+
+## 运行模式（示例命令）
+
+- `api` — 启动 FastAPI 服务：
 
 ```bash
-# 在仓库根目录运行（需 Docker 与 Docker Compose）
+python main.py --mode api
+```
+
+- `cli` — 交互式 ReAct Agent（本地调试）：
+
+```bash
+python main.py --mode cli
+```
+
+- `data-gen` — 生成微调/评测数据：
+
+```bash
+python main.py --mode data-gen
+```
+
+- `finetune` — LoRA 微调：
+
+```bash
+python main.py --mode finetune --config finetune/config.yaml
+```
+
+- `merge` — 将 LoRA 权重合并回基模型（供部署使用）
+- `eval` — 运行 `aio-eval` 下的评测脚本
+- `build-index` — 根据 `rag/knowledge` 生成向量索引（首次或数据变更时）
+
+## 前端开发与关键文件
+
+- 运行（开发）：
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+- 构建（生产）：
+
+```bash
+cd frontend
+npm run build
+```
+
+- 关键文件：
+	- `frontend/src/components/ModuleVisualizations.tsx` — 监控/可视化组件（已做空数据保护）。
+	- `frontend/src/App.tsx` — 应用入口及路由。
+
+## 架构图（概览）
+
+```
+								 +-------------------+
+								 |   Frontend (Vite) |
+								 +---------+---------+
+													 |
+											 HTTP/WS
+													 |
+								 +---------v---------+
+								 |   FastAPI Backend |
+								 +----+----+----+----+
+											|    |    |
+								 +----v+ +v+   v-----+
+								 |Prometheus|Postgres|Elastic|
+								 +---------+-------+------+ 
+											|        
+									 Models (local or remote)
+									 Rag Vectorstore (./rag/vectorstore)
+```
+
+（请替换为更精美的 PNG/SVG 架构图；我可以按需生成并放入 `docs/`）
+
+## 部署建议
+
+- 本仓库包含 `docker/docker-compose.yaml`，可用于本地或测试环境一键启动依赖（Prometheus / Alertmanager / ES / Postgres / 后端）。
+
+一键启动示例：
+
+```bash
 docker compose -f docker/docker-compose.yaml up --build
 ```
 
-注意：默认 `docker/Dockerfile` 基于 `nvidia/cuda` 镜像并尝试安装 Python 与依赖。如果需要在 GPU 上使用模型推理，确保宿主机已安装并配置 NVIDIA Container Toolkit，并在 compose 中启用设备或使用 `--gpus`。
+生产环境提示：
 
-模型与检索
-------------
+- 模型文件与索引不要提交到 Git；使用外部对象存储或 Git LFS。
+- 使用专门的模型服务（例如 Triton / Ollama / 自托管推理服务）以改善启动时间与资源隔离。
+- 使用 Secret Manager（Kubernetes Secrets / Vault / GitHub Secrets）管理凭据。
 
-- 模型文件夹：`models/`（可通过 `config/settings.py` 中的环境变量指向其他位置）
-- RAG 知识与向量存储：`rag/knowledge`、`rag/vectorstore`
-- 在 CLI 模式（`python main.py --mode cli`）或 API 启动时，项目会尝试初始化检索器并在向量库为空时构建索引。
+## 测试、Lint 与 CI 建议
 
-运行模式详解（`main.py`）
---------------------------------
-- `api`：启动 FastAPI 服务（推荐用于生产/容器部署）
-- `cli`：交互式 ReAct Agent（文本终端）
-- `data-gen`：生成微调/评估用训练数据
-- `finetune`：执行 LoRA 微调（参考 `finetune/config.yaml`）
-- `merge`：合并 LoRA 权重
-- `eval`：运行评估基准（参考 `aio-eval/`）
-- `rag-bench`：RAG 检索性能 benchmark
-- `build-index`：手动构建知识库索引
-
-前端说明
----------
-
-前端位于 `frontend/`，使用 React + TypeScript + Vite。主要启动命令在 [frontend/package.json](frontend/package.json) 中：
-
-- `npm run dev`：本地开发
-- `npm run build`：构建生产包
-
-关键文件：
-- UI 组件位于 `frontend/src/components/`（例如 `ModuleVisualizations.tsx` 提供监控与面板可视化）
-
-开发与测试
-----------------
-
-- 后端单元/集成测试位于 `tests/`，可以使用 `pytest` 运行：
+- 后端测试：
 
 ```bash
 pytest -q
 ```
 
-- 前端使用 `eslint` 与 TypeScript 编译辅助质量控制：
+- 前端检查：
 
 ```bash
 cd frontend
 npm run lint
-npm run build
 ```
 
-常见问题与注意事项
---------------------
-- 模型体积大：请确保有足够磁盘空间与网络带宽用于下载 Hugging Face 模型权重。
-- 若在 Docker 中使用 GPU，请安装并启用 NVIDIA Container Toolkit，并在 `docker-compose` 中为容器分配 GPU 资源。
-- 若遇到缺少配置/密钥，请检查 `config/.env` 或环境变量是否正确设置。
+- 推荐 GitHub Actions 快速流程（示例描述）：
+	1. Checkout
+	2. Setup Python, install deps, run `pytest`
+	3. Setup Node, install deps, run `npm run lint`, `npm run build`
+	4. (可选) Build Docker 镜像并 push
 
-贡献指南
------------
+我可以为你生成并提交一个基础的 `.github/workflows/ci.yml` 配置（需要你确认是否提交到仓库）。
 
-欢迎提交 Issue 与 PR。建议流程：
-1. Fork 仓库并新建分支
-2. 提交修复/功能分支并包含必要测试
-3. 发起 PR 并在 PR 描述中说明变更与测试步骤
+## 常见问题与排查要点
 
-许可证
--------
+- 后端无法启动：检查 `API_PORT`、日志输出与依赖服务（Postgres/ES）。
+- Prometheus 无数据：确认 `PROMETHEUS_URL` 与抓取配置正确。
+- 模型加载失败：确保 `QWEN_MODEL_PATH` 可读且磁盘空间充足，或使用远程模型服务。
 
-仓库当前未包含明确许可证文件。建议在发布到公共仓库前补充 `LICENSE`（如 MIT、Apache-2.0 等），以明确使用与贡献条款。
+## 目录与文件说明（关键）
 
-联系方式
------------
-如需进一步帮助或希望我把该 README 调整为英文版/更紧凑的版本，请告诉我需要改动的部分。
+- `main.py` — 启动入口。
+- `api/` — FastAPI 路由与服务注册。
+- `agent/` — 代理逻辑、prompt 组装与反应流（ReAct）。
+- `tools/` — 各种运维工具封装（prometheus/prediction/ssh/sql 等）。
+- `frontend/` — 前端源码（Vite + React）。
+- `rag/` — 知识文档与向量索引、检索逻辑。
+- `finetune/` — LoRA 微调脚本与配置。
+
+## 贡献指南
+
+- 请使用分支开发并提交 PR，提交信息建议采用 `conventional commits`。
+- PR 前请确保后端测试通过并运行前端 lint。对于大型改动建议先在 Issue 讨论设计。
+
+## 许可
+
+本项目使用 MIT 许可证（详见 `LICENSE`）。
 
 ---
-小提示：如果你希望我把上述 README 自动提交为一个 Git commit 并推送到远端仓库，我可以帮你生成对应的命令序列。 
+
+接下来我可以：
+
+- 生成并提交一个示例 GitHub Actions CI 配置（`ci`）；
+- 在 `frontend/README.md` 添加组件说明并放置截图占位（`screenshots`）；
+- 生成英文版 `README.en.md`（`english`）。
+
+请选择下一步：`ci` / `screenshots` / `english` / `none`。
+
