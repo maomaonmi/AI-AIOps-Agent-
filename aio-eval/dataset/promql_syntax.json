@@ -1,0 +1,72 @@
+[
+    {
+        "id": "promql_001",
+        "question": "查询web-server组的CPU使用率",
+        "expected_tool": "prometheus_query",
+        "expected_promql_contains": ["node_cpu_seconds_total", "mode", "idle", "rate"],
+        "scenario": "CPU监控"
+    },
+    {
+        "id": "promql_002",
+        "question": "10.0.0.1的内存使用率",
+        "expected_tool": "prometheus_query",
+        "expected_promql_contains": ["node_memory_MemAvailable_bytes", "node_memory_MemTotal_bytes"],
+        "scenario": "内存监控"
+    },
+    {
+        "id": "promql_003",
+        "question": "查询磁盘使用率超过90%的分区",
+        "expected_tool": "prometheus_query",
+        "expected_promql_contains": ["node_filesystem_avail_bytes", "node_filesystem_size_bytes", "90"],
+        "scenario": "磁盘监控"
+    },
+    {
+        "id": "promql_004",
+        "question": "查询order-service的HTTP 5xx错误率",
+        "expected_tool": "prometheus_query",
+        "expected_promql_contains": ["http_requests_total", "5", "rate"],
+        "scenario": "HTTP监控"
+    },
+    {
+        "id": "promql_005",
+        "question": "查询gateway的P99响应时间",
+        "expected_tool": "prometheus_query",
+        "expected_promql_contains": ["histogram_quantile", "0.99", "bucket"],
+        "scenario": "延迟监控"
+    },
+    {
+        "id": "promql_006",
+        "question": "查询所有节点的网络接收速率",
+        "expected_tool": "prometheus_query",
+        "expected_promql_contains": ["node_network_receive_bytes_total", "rate"],
+        "scenario": "网络监控"
+    },
+    {
+        "id": "promql_007",
+        "question": "查询api-server组的CPU使用率是否超过85%",
+        "expected_tool": "prometheus_query",
+        "expected_promql_contains": ["node_cpu_seconds_total", "85"],
+        "scenario": "CPU阈值"
+    },
+    {
+        "id": "promql_008",
+        "question": "查询db-server的磁盘IO使用率",
+        "expected_tool": "prometheus_query",
+        "expected_promql_contains": ["node_disk", "rate"],
+        "scenario": "磁盘IO"
+    },
+    {
+        "id": "promql_009",
+        "question": "查询cache-server的连接数",
+        "expected_tool": "prometheus_query",
+        "expected_promql_contains": ["connections", "connected"],
+        "scenario": "连接数监控"
+    },
+    {
+        "id": "promql_010",
+        "question": "查询mq-server的消息堆积量",
+        "expected_tool": "prometheus_query",
+        "expected_promql_contains": ["queue", "messages"],
+        "scenario": "消息队列"
+    }
+]

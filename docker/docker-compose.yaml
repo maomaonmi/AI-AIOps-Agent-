@@ -1,0 +1,97 @@
+version: "3.8"
+
+services:
+  aiops-agent:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: aiops-agent
+    ports:
+      - "8000:8000"
+    environment:
+      - QWEN_MODEL_PATH=${QWEN_MODEL_PATH:-Qwen/Qwen-7B-Chat}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://user:password@postgres:5432/cmdb}
+      - PROMETHEUS_URL=${PROMETHEUS_URL:-http://prometheus:9090}
+      - ALERTMANAGER_URL=${ALERTMANAGER_URL:-http://alertmanager:9093}
+      - ELASTICSEARCH_URL=${ELASTICSEARCH_URL:-http://elasticsearch:9200}
+      - SSH_HOSTS_CONFIG=/app/config/ssh_hosts.json
+      - RAG_VECTORSTORE_DIR=/app/rag/vectorstore
+      - RAG_KNOWLEDGE_DIR=/app/rag/knowledge
+      - BGE_MODEL_PATH=${BGE_MODEL_PATH:-BAAI/bge-large-zh-v1.5}
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+    volumes:
+      - ../config:/app/config
+      - ../rag/knowledge:/app/rag/knowledge
+      - ../rag/vectorstore:/app/rag/vectorstore
+      - model-cache:/root/.cache/huggingface
+    depends_on:
+      prometheus:
+        condition: service_started
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    networks:
+      - aiops-net
+
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: aiops-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    networks:
+      - aiops-net
+
+  alertmanager:
+    image: prom/alertmanager:v0.26.0
+    container_name: aiops-alertmanager
+    ports:
+      - "9093:9093"
+    networks:
+      - aiops-net
+
+  elasticsearch:
+    image: elasticsearch:8.11.0
+    container_name: aiops-elasticsearch
+    ports:
+      - "9200:9200"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    networks:
+      - aiops-net
+
+  postgres:
+    image: postgres:16
+    container_name: aiops-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=cmdb
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    networks:
+      - aiops-net
+
+volumes:
+  model-cache:
+  prometheus-data:
+  es-data:
+  pg-data:
+
+networks:
+  aiops-net:
+    driver: bridge

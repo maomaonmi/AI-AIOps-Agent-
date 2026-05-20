@@ -1,0 +1,74 @@
+{
+    "regex_templates": [
+        {
+            "scenario": "Java异常日志匹配",
+            "templates": [
+                {
+                    "question": "查找Java OOM错误",
+                    "regex": "java\\.lang\\.OutOfMemoryError|OOM Killer|GC overhead limit exceeded",
+                    "thought": "Java OOM有多种表现形式，需要匹配OutOfMemoryError和GC overhead"
+                },
+                {
+                    "question": "查找Java堆栈异常",
+                    "regex": "Exception:\\s*\\w+|at\\s+[\\w.$]+\\([\\w]+\\.java:\\d+\\)",
+                    "thought": "Java异常日志包含Exception类名和堆栈信息"
+                },
+                {
+                    "question": "查找Java GC日志",
+                    "regex": "\\[GC\\s|Full GC|ParNew|CMS|G1\\sYoung|G1\\sOld",
+                    "thought": "GC日志包含GC类型和代信息"
+                }
+            ]
+        },
+        {
+            "scenario": "Nginx日志匹配",
+            "templates": [
+                {
+                    "question": "查找Nginx 5xx错误",
+                    "regex": "HTTP/\\d\\.\\d\"\\s[5]\\d{2}",
+                    "thought": "Nginx日志中HTTP状态码5xx表示服务端错误"
+                },
+                {
+                    "question": "查找Nginx慢请求",
+                    "regex": "request_time:\\s*[\\d.]+",
+                    "thought": "Nginx request_time字段记录请求耗时"
+                }
+            ]
+        },
+        {
+            "scenario": "系统错误日志匹配",
+            "templates": [
+                {
+                    "question": "查找磁盘I/O错误",
+                    "regex": "I/O error|read-only file system|No space left on device|disk write error",
+                    "thought": "磁盘I/O错误包含多种表现形式"
+                },
+                {
+                    "question": "查找网络连接异常",
+                    "regex": "Connection refused|Connection timed out|Connection reset|No route to host|Network is unreachable",
+                    "thought": "网络连接异常有多种错误类型"
+                },
+                {
+                    "question": "查找进程崩溃日志",
+                    "regex": "Segmentation fault|core dumped|killed by signal|SIGTERM|SIGKILL",
+                    "thought": "进程崩溃通常产生信号和core dump"
+                }
+            ]
+        },
+        {
+            "scenario": "数据库错误日志匹配",
+            "templates": [
+                {
+                    "question": "查找MySQL连接错误",
+                    "regex": "Too many connections|Access denied|Lost connection|Deadlock found",
+                    "thought": "MySQL常见错误包括连接数过多、权限拒绝、连接丢失和死锁"
+                },
+                {
+                    "question": "查找Redis异常",
+                    "regex": "OOM command not allowed|NOAUTH|MASTERDOWN|LOADING|MISCONF",
+                    "thought": "Redis错误包括内存不足、认证失败、主节点下线等"
+                }
+            ]
+        }
+    ]
+}

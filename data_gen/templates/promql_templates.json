@@ -1,0 +1,101 @@
+{
+    "promql_templates": [
+        {
+            "scenario": "CPU使用率查询",
+            "metric": "node_cpu_seconds_total",
+            "templates": [
+                {
+                    "question": "查询{group}组的CPU使用率",
+                    "promql": "avg by(instance)(rate(node_cpu_seconds_total{{group=\"{group}\",mode!=\"idle\"}}[5m])) * 100",
+                    "thought": "需要查询CPU使用率，使用node_cpu_seconds_total指标，排除idle模式，计算5分钟平均使用率"
+                },
+                {
+                    "question": "{instance}的CPU使用率是否超过{threshold}%",
+                    "promql": "avg by(instance)(rate(node_cpu_seconds_total{{instance=\"{instance}\",mode!=\"idle\"}}[5m])) * 100 > {threshold}",
+                    "thought": "需要判断CPU使用率是否超过阈值，使用比较运算符"
+                },
+                {
+                    "question": "查询所有节点过去{duration}的CPU平均使用率",
+                    "promql": "avg by(instance)(rate(node_cpu_seconds_total{{mode!=\"idle\"}}[{duration}])) * 100",
+                    "thought": "需要查询指定时间范围的CPU使用率"
+                }
+            ]
+        },
+        {
+            "scenario": "内存使用率查询",
+            "metric": "node_memory_MemAvailable_bytes",
+            "templates": [
+                {
+                    "question": "查询{group}组的内存使用率",
+                    "promql": "(1 - avg by(instance)(node_memory_MemAvailable_bytes{{group=\"{group}\"}} / node_memory_MemTotal_bytes{{group=\"{group}\"}})) * 100",
+                    "thought": "内存使用率 = 1 - 可用内存/总内存"
+                },
+                {
+                    "question": "{instance}的可用内存",
+                    "promql": "node_memory_MemAvailable_bytes{{instance=\"{instance}\"}}",
+                    "thought": "直接查询可用内存指标"
+                }
+            ]
+        },
+        {
+            "scenario": "磁盘使用率查询",
+            "metric": "node_filesystem_avail_bytes",
+            "templates": [
+                {
+                    "question": "查询{instance}的磁盘使用率",
+                    "promql": "(1 - avg by(mountpoint)(node_filesystem_avail_bytes{{instance=\"{instance}\",fstype!=\"tmpfs\"}} / node_filesystem_size_bytes{{instance=\"{instance}\",fstype!=\"tmpfs\"}})) * 100",
+                    "thought": "磁盘使用率 = 1 - 可用空间/总空间，排除tmpfs文件系统"
+                },
+                {
+                    "question": "查询磁盘使用率超过{threshold}%的分区",
+                    "promql": "(1 - node_filesystem_avail_bytes{{fstype!=\"tmpfs\"}} / node_filesystem_size_bytes{{fstype!=\"tmpfs\"}}) * 100 > {threshold}",
+                    "thought": "使用比较运算符筛选超过阈值的分区"
+                }
+            ]
+        },
+        {
+            "scenario": "网络流量查询",
+            "metric": "node_network_receive_bytes_total",
+            "templates": [
+                {
+                    "question": "查询{instance}的网络接收速率",
+                    "promql": "rate(node_network_receive_bytes_total{{instance=\"{instance}\",device!=\"lo\"}}[5m]) * 8",
+                    "thought": "网络接收速率使用rate函数计算5分钟平均速率，乘8转换为bit"
+                },
+                {
+                    "question": "查询{group}组网络发送总量",
+                    "promql": "sum by(instance)(rate(node_network_transmit_bytes_total{{group=\"{group}\",device!=\"lo\"}}[5m]))",
+                    "thought": "网络发送总量使用sum聚合，排除lo回环接口"
+                }
+            ]
+        },
+        {
+            "scenario": "HTTP请求监控",
+            "metric": "http_requests_total",
+            "templates": [
+                {
+                    "question": "查询{service}的HTTP请求QPS",
+                    "promql": "sum by(status_code)(rate(http_requests_total{{service=\"{service}\"}}[5m]))",
+                    "thought": "HTTP QPS使用rate函数计算每秒请求数，按状态码分组"
+                },
+                {
+                    "question": "查询{service}的HTTP 5xx错误率",
+                    "promql": "sum(rate(http_requests_total{{service=\"{service}\",status_code=~\"5..\"}}[5m])) / sum(rate(http_requests_total{{service=\"{service}\"}}[5m])) * 100",
+                    "thought": "5xx错误率 = 5xx请求数/总请求数，使用正则匹配5xx状态码"
+                },
+                {
+                    "question": "查询{service}的P99响应时间",
+                    "promql": "histogram_quantile(0.99, sum by(le)(rate(http_request_duration_seconds_bucket{{service=\"{service}\"}}[5m])))",
+                    "thought": "P99使用histogram_quantile函数，le标签是histogram的bucket边界"
+                }
+            ]
+        }
+    ],
+    "variables": {
+        "group": ["web-server", "api-server", "db-server", "cache-server", "mq-server"],
+        "instance": ["10.0.0.1:9100", "10.0.0.2:9100", "10.0.0.3:9100", "10.0.0.4:9100"],
+        "threshold": [80, 85, 90, 95],
+        "duration": ["5m", "10m", "30m", "1h"],
+        "service": ["order-service", "user-service", "payment-service", "gateway", "auth-service"]
+    }
+}

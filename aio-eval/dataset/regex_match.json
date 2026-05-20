@@ -1,0 +1,72 @@
+[
+    {
+        "id": "regex_001",
+        "question": "查找Java OOM错误",
+        "expected_tool": "log_search",
+        "expected_regex_contains": ["OutOfMemoryError", "OOM"],
+        "scenario": "Java异常"
+    },
+    {
+        "id": "regex_002",
+        "question": "查找数据库连接超时日志",
+        "expected_tool": "log_search",
+        "expected_regex_contains": ["Connection", "timeout", "timed out"],
+        "scenario": "数据库异常"
+    },
+    {
+        "id": "regex_003",
+        "question": "查找Nginx 5xx错误",
+        "expected_tool": "log_search",
+        "expected_regex_contains": ["5", "HTTP"],
+        "scenario": "Nginx日志"
+    },
+    {
+        "id": "regex_004",
+        "question": "查找磁盘空间不足错误",
+        "expected_tool": "log_search",
+        "expected_regex_contains": ["No space left", "disk"],
+        "scenario": "磁盘异常"
+    },
+    {
+        "id": "regex_005",
+        "question": "查找进程崩溃日志",
+        "expected_tool": "log_search",
+        "expected_regex_contains": ["Segmentation fault", "killed", "signal"],
+        "scenario": "进程异常"
+    },
+    {
+        "id": "regex_006",
+        "question": "查找MySQL死锁日志",
+        "expected_tool": "log_search",
+        "expected_regex_contains": ["Deadlock"],
+        "scenario": "数据库异常"
+    },
+    {
+        "id": "regex_007",
+        "question": "查找Redis连接异常",
+        "expected_tool": "log_search",
+        "expected_regex_contains": ["NOAUTH", "Connection refused", "Redis"],
+        "scenario": "缓存异常"
+    },
+    {
+        "id": "regex_008",
+        "question": "查找GC频繁的日志",
+        "expected_tool": "log_search",
+        "expected_regex_contains": ["GC", "Full"],
+        "scenario": "Java异常"
+    },
+    {
+        "id": "regex_009",
+        "question": "查找网络连接重置日志",
+        "expected_tool": "log_search",
+        "expected_regex_contains": ["Connection reset", "reset"],
+        "scenario": "网络异常"
+    },
+    {
+        "id": "regex_010",
+        "question": "查找SSL证书错误",
+        "expected_tool": "log_search",
+        "expected_regex_contains": ["SSL", "certificate"],
+        "scenario": "安全异常"
+    }
+]

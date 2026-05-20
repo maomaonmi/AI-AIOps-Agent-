@@ -216,3 +216,24 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+env/
+venv/
+.env
+# Node
+node_modules/
+frontend/node_modules/
+# Models & caches
+models/
+model-cache/
+*.safetensors
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+# Logs
+*.log

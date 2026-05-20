@@ -1,0 +1,35 @@
+{
+    "hosts": [
+        {
+            "alias": "web-server-01",
+            "hostname": "10.0.0.1",
+            "port": 22,
+            "username": "ops",
+            "key_path": "~/.ssh/id_rsa"
+        },
+        {
+            "alias": "db-server-01",
+            "hostname": "10.0.0.2",
+            "port": 22,
+            "username": "ops",
+            "key_path": "~/.ssh/id_rsa"
+        }
+    ],
+    "command_whitelist": [
+        "top -bn1",
+        "free -m",
+        "df -h",
+        "iostat",
+        "netstat -tlnp",
+        "ps aux",
+        "systemctl status",
+        "journalctl",
+        "cat /var/log/",
+        "ls",
+        "grep",
+        "awk",
+        "tail",
+        "head",
+        "wc"
+    ]
+}

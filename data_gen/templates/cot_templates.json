@@ -1,0 +1,97 @@
+{
+    "cot_templates": [
+        {
+            "scenario": "CPU异常排查",
+            "instruction": "服务器CPU使用率异常升高",
+            "thought_chain": [
+                "首先需要确认CPU使用率的具体数值和趋势，查询Prometheus获取CPU监控数据",
+                "确认异常实例后，需要通过SSH查看该主机的进程状态，找出占用CPU最高的进程",
+                "定位到具体进程后，需要查看该进程的日志，分析异常原因",
+                "结合知识库中的SOP，给出处理建议"
+            ],
+            "expected_tools": ["prometheus_query", "ssh_exec", "log_search", "knowledge_search"]
+        },
+        {
+            "scenario": "内存泄漏排查",
+            "instruction": "服务内存持续增长疑似内存泄漏",
+            "thought_chain": [
+                "先查询内存使用率趋势，确认是否确实存在持续增长",
+                "查看该主机上各进程的内存占用情况",
+                "检查应用日志中是否有OOM或GC频繁的记录",
+                "检索知识库中关于内存泄漏排查的标准流程"
+            ],
+            "expected_tools": ["prometheus_query", "ssh_exec", "log_search", "knowledge_search"]
+        },
+        {
+            "scenario": "磁盘空间不足",
+            "instruction": "磁盘空间不足告警",
+            "thought_chain": [
+                "查询磁盘使用率指标，确认哪些分区空间不足",
+                "SSH登录查看大文件和目录占用情况",
+                "检查是否有异常日志文件或临时文件占用空间",
+                "给出清理建议，注意不要删除重要数据"
+            ],
+            "expected_tools": ["prometheus_query", "ssh_exec", "log_search"]
+        },
+        {
+            "scenario": "服务响应超时",
+            "instruction": "接口响应时间P99超过阈值",
+            "thought_chain": [
+                "查询HTTP请求的P99响应时间指标",
+                "检查是否有活跃告警关联该服务",
+                "查看该服务的错误日志",
+                "检查数据库连接池状态",
+                "综合分析给出优化建议"
+            ],
+            "expected_tools": ["prometheus_query", "alert_query", "log_search", "sql_query"]
+        },
+        {
+            "scenario": "数据库连接池耗尽",
+            "instruction": "数据库连接池耗尽导致服务不可用",
+            "thought_chain": [
+                "查询数据库连接数和等待数",
+                "查看活跃连接的SQL语句",
+                "检查是否有慢查询或未提交事务",
+                "查看应用日志中的数据库错误",
+                "给出临时和永久修复建议"
+            ],
+            "expected_tools": ["sql_query", "log_search", "knowledge_search"]
+        },
+        {
+            "scenario": "网络异常排查",
+            "instruction": "服务间调用出现网络超时",
+            "thought_chain": [
+                "查询网络流量和错误率指标",
+                "检查是否有网络相关告警",
+                "SSH查看网络连接状态和TCP重传情况",
+                "检查DNS解析是否正常",
+                "给出网络问题排查建议"
+            ],
+            "expected_tools": ["prometheus_query", "alert_query", "ssh_exec"]
+        },
+        {
+            "scenario": "告警风暴处理",
+            "instruction": "短时间内收到大量告警",
+            "thought_chain": [
+                "查询所有活跃告警，按服务和严重程度分类",
+                "找出根因告警，其他可能是关联告警",
+                "针对根因告警查询相关监控指标",
+                "检索知识库中类似故障的处理记录",
+                "给出抑制关联告警和修复根因的建议"
+            ],
+            "expected_tools": ["alert_query", "prometheus_query", "knowledge_search"]
+        },
+        {
+            "scenario": "Kubernetes Pod异常",
+            "instruction": "Pod频繁重启或CrashLoopBackOff",
+            "thought_chain": [
+                "查询Pod重启次数指标",
+                "查看Pod事件和状态",
+                "检查容器日志中的错误信息",
+                "检查资源限制是否合理",
+                "给出Pod稳定性优化建议"
+            ],
+            "expected_tools": ["prometheus_query", "ssh_exec", "log_search", "knowledge_search"]
+        }
+    ]
+}
