@@ -10,6 +10,8 @@
 
 </div>
 
+<img width="1277" height="625" alt="image" src="https://github.com/user-attachments/assets/e769eb2d-c165-4241-a8f3-64e3d1e1cd62" />
+
 ---
 
 ## 📑 目录
@@ -83,6 +85,8 @@
 
 采用 ReAct (Reasoning + Acting) 范式，Agent 在每一步推理后调用真实工具获取实时数据，而非猜测或编造。支持多步推理链，最多 5 轮工具调用，确保诊断结论基于真实系统状态。
 
+<img width="980" height="617" alt="image" src="https://github.com/user-attachments/assets/dbcc1804-769b-4e0a-9b13-9900df7513b2" />
+
 ### 2. 🎯 分层提示词路由 — 模块专属规则引擎
 
 创新性地设计了「意图分类 → 模块匹配 → 提示词组装 → 工具过滤」四层路由架构。每个运维模块（CPU/内存/磁盘/网络/GPU）拥有独立的详细规则模板，包含触发条件、工具调用流程、分析阈值、输出格式和图表要求，彻底解决"问什么都出图表"的问题。
@@ -91,13 +95,19 @@
 
 所有监控数据均通过 psutil、nvidia-ml-py 等底层库直接采集真实硬件数据，GPU 信息通过 NVML API 获取，CPU 温度、频率、每核负载均为实时值。前端图表每 3 秒刷新，数据更新频率 ≥1次/秒。
 
+<img width="1088" height="588" alt="image" src="https://github.com/user-attachments/assets/65ede070-8bad-4b7b-bc0e-81fc1d2eb231" />
+
 ### 4. 🔍 RAG 增强检索 — 运维知识库
 
 基于 BGE-large-zh 向量模型 + FAISS 构建私有运维知识库，支持故障处理 SOP、架构文档、配置规范的语义检索。Agent 在诊断时可自动检索相关案例和最佳实践，提供有据可依的处置建议。
 
+<img width="743" height="597" alt="image" src="https://github.com/user-attachments/assets/4ceb2692-d0ae-41ef-802b-9c059264b277" />
+
 ### 5. 🐳 一键容器化部署
 
 完整的 Docker Compose 编排方案，包含 AI 推理服务、Prometheus、AlertManager、Elasticsearch、PostgreSQL 五大组件，支持 GPU 直通，一条命令即可启动完整运维平台。
+
+<img width="738" height="245" alt="image" src="https://github.com/user-attachments/assets/ee42a179-3fef-4f19-aa10-30357593d0cd" />
 
 ---
 
@@ -473,6 +483,7 @@ Agent 采用 ReAct (Reasoning + Acting) 范式，执行流程：
 - **展示内容**：CPU/内存/GPU/网络 四大模块实时数据
 - **图表类型**：折线图（趋势）、仪表盘（使用率）、柱状图（进程排名）
 - **异常预警**：超过阈值自动标红
+<img width="1090" height="592" alt="image" src="https://github.com/user-attachments/assets/1949bc33-8ec6-4e75-a021-a652f836b4e3" />
 
 ### 2. 智能对话
 
@@ -480,6 +491,7 @@ Agent 采用 ReAct (Reasoning + Acting) 范式，执行流程：
 - **响应模式**：普通模式 / 深度思考模式 / 在线模式
 - **流式输出**：SSE 逐字渲染
 - **模块可视化**：根据意图自动展示对应监控面板
+<img width="1088" height="615" alt="image" src="https://github.com/user-attachments/assets/9967f65b-d66f-4424-b72d-e3a047dfd42b" />
 
 ### 3. 系统体检
 
@@ -492,17 +504,21 @@ Agent 采用 ReAct (Reasoning + Acting) 范式，执行流程：
 - **预测范围**：未来 1-24 小时
 - **目标**：CPU / 内存 / 磁盘使用率
 - **输出**：预测值 + 置信区间 + 风险预警
+<img width="550" height="620" alt="image" src="https://github.com/user-attachments/assets/5a39de84-a776-4add-9f2b-6f55ee6c8c26" />
 
 ### 5. 架构报告
 
 - **采集项**：操作系统、CPU型号/核心数、内存容量、磁盘分区、GPU信息、网络接口、运行时环境
 - **输出**：结构化系统全景报告
+<img width="885" height="544" alt="image" src="https://github.com/user-attachments/assets/084a4eac-7309-4368-b573-57bf5ee2cc6d" />
+
 
 ### 6. 日志可视化
 
 - **数据源**：系统日志文件扫描
 - **分析维度**：日志级别分布、时间热力图、高频错误统计
 - **乱码处理**：自动过滤非文本文件和乱码行
+
 
 ### 7. 快捷功能面板
 
