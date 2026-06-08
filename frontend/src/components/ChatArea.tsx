@@ -17,12 +17,41 @@ export default function ChatArea() {
 
   const isMobile = useIsMobile();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
   const activeConversation = conversations.find((c) => c.id === activeConversationId);
   const messages = activeConversation?.messages || [];
 
+  const scrollToBottom = () => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
+  };
+
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const timer = setTimeout(scrollToBottom, 100);
+    return () => clearTimeout(timer);
   }, [messages]);
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      const observer = new MutationObserver(() => {
+        scrollToBottom();
+      });
+      
+      if (chatContainerRef.current) {
+        observer.observe(chatContainerRef.current, {
+          childList: true,
+          subtree: true,
+          characterData: true
+        });
+      }
+      
+      return () => observer.disconnect();
+    }
+  }, [activeConversationId, messages.length]);
 
   if (!activeConversationId || messages.length === 0) {
     return (
@@ -58,7 +87,7 @@ export default function ChatArea() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto flex items-start justify-center">
+    <div ref={chatContainerRef} className="flex-1 overflow-y-auto flex items-start justify-center">
       {isMobile && (
         <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3 flex items-center gap-3">
           <button

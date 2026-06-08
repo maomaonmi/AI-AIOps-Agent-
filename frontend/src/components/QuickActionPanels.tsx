@@ -240,6 +240,12 @@ export function TrendPredictPanel() {
   const [loading, setLoading] = useState(true);
   const [activeMetric, setActiveMetric] = useState(0);
   const [timeRange, setTimeRange] = useState(24);
+  const [liveBuffer, setLiveBuffer] = useState<Record<string, number[]>>({});
+  const [liveTimestamps, setLiveTimestamps] = useState<Record<string, string[]>>({});
+  const [isLive, setIsLive] = useState(true);
+
+  const MAX_LIVE_POINTS = 40;
+  const LIVE_INTERVAL_MS = 2000;
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -256,9 +262,64 @@ export function TrendPredictPanel() {
     }
   }, [timeRange]);
 
+  const fetchLiveTick = useCallback(async () => {
+    try {
+      const res = await fetch('/api/prediction/realtime');
+      const json = await res.json();
+      if (json.status === 'success' && json.metrics) {
+        const now = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        setLiveBuffer(prev => {
+          const next = { ...prev };
+          for (const [key, val] of Object.entries(json.metrics)) {
+            if (val !== null) {
+              const arr = [...(prev[key] || []), val as number];
+              next[key] = arr.slice(-MAX_LIVE_POINTS);
+            }
+          }
+          return next;
+        });
+        setLiveTimestamps(prev => {
+          const next = { ...prev };
+          for (const key of Object.keys(json.metrics)) {
+            const arr = [...(prev[key] || []), now];
+            next[key] = arr.slice(-MAX_LIVE_POINTS);
+          }
+          return next;
+        });
+        if (data) {
+          setData(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              predictions: prev.predictions.map(p => {
+                const keyMap: Record<string, string> = { 'CPU 使用率': 'cpu', '内存使用率': 'memory', '磁盘使用率': 'disk', 'GPU 使用率': 'gpu', '网络流量': 'network' };
+                const mKey = keyMap[p.metric_name];
+                if (!mKey) return p;
+                const liveVal = json.metrics[mKey];
+                if (liveVal === null || liveVal === undefined) return p;
+                const newPoints = [...p.points.filter(pt => !pt.is_predicted)];
+                if (newPoints.length > MAX_LIVE_POINTS) newPoints.shift();
+                newPoints.push({ timestamp: now, value: Math.round(liveVal * 10) / 10, is_predicted: false });
+                return { ...p, current_value: Math.round(liveVal * 10) / 10, points: newPoints };
+              }),
+              timestamp: new Date().toISOString(),
+            };
+          });
+        }
+      }
+    } catch { }
+  }, [data]);
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    if (!isLive || loading) return;
+    fetchLiveTick();
+    const timer = setInterval(fetchLiveTick, LIVE_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [isLive, loading, fetchLiveTick]);
 
   if (loading) {
     return (
@@ -274,72 +335,220 @@ export function TrendPredictPanel() {
   }
 
   const currentPrediction = data.predictions[activeMetric];
+  const seriesColor = currentPrediction?.color || '#3b82f6';
+  const points = currentPrediction?.points || [];
+  const actualPoints = points.filter(p => !p.is_predicted);
+  const predPoints = points.filter(p => p.is_predicted);
+  const splitIndex = actualPoints.length;
+  const hasActualData = actualPoints.length > 0;
 
-  const chartOption = {
+  const hexToRgba = (hex: string, alpha: number): string => {
+    if (!hex || !hex.startsWith('#')) return `rgba(59,130,246,${alpha})`;
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r},${g},${b},${alpha})`;
+  };
+
+  const chartOption: any = {
+    animation: true,
+    animationDuration: 500,
+    animationEasingUpdate: 'cubicInOut',
+    backgroundColor: 'transparent',
     tooltip: {
       trigger: 'axis',
-      backgroundColor: 'rgba(255,255,255,0.96)',
-      borderColor: '#e2e8f0',
+      confine: true,
+      enterable: true,
+      backgroundColor: 'rgba(15,23,42,0.92)',
+      borderColor: 'rgba(255,255,255,0.1)',
       borderWidth: 1,
-      borderRadius: 8,
-      padding: [10, 14],
-      textStyle: { color: '#334155', fontSize: 11 },
+      borderRadius: 10,
+      padding: [12, 16],
+      textStyle: { color: '#e2e8f0', fontSize: 12 },
+      extraCssText: 'box-shadow: 0 10px 40px rgba(0,0,0,0.25);',
       formatter: (params: any) => {
-        const point = params[0];
-        const isPred = currentPrediction.points.find(p => p.timestamp === point.axisValue)?.is_predicted;
-        let html = `<div style="font-weight:600;margin-bottom:4px;">${point.axisValue}</div>`;
-        html += `<div style="color:#64748b;">${currentPrediction.metric_name}: <span style="font-weight:700;color:#1e293b;">${point.value.toFixed(1)}${currentPrediction.unit}</span></div>`;
-        if (isPred && currentPrediction.points.find(p => p.timestamp === point.axisValue)?.confidence_lower) {
-          const p = currentPrediction.points.find(p => p.timestamp === point.axisValue);
-          html += `<div style="color:#94a3b8;font-size:10px;">置信区间: ${p?.confidence_lower?.toFixed(1)} - ${p?.confidence_upper?.toFixed(1)}</div>`;
+        const pt = params[0];
+        const idx = pt.dataIndex;
+        const isPred = idx >= splitIndex;
+        const pointData = points[idx];
+        let html = `<div style="font-weight:700;font-size:13px;margin-bottom:6px;color:#f1f5f9;">${pt.axisValue}</div>`;
+        html += `<div style="display:flex;align-items:center;gap:6px;">`;
+        html += `<span style="width:8px;height:8px;border-radius:50%;background:${isPred ? seriesColor : '#10b981'};display:inline-block;"></span>`;
+        html += `<span style="color:#94a3b8;">${currentPrediction.metric_name}</span>`;
+        html += `<span style="font-weight:700;color:${isPred ? seriesColor : '#10b981'};margin-left:auto;">${pt.value.toFixed(1)}${currentPrediction.unit}</span>`;
+        html += `</div>`;
+        if (isPred && pointData?.confidence_lower !== undefined) {
+          html += `<div style="color:#64748b;font-size:11px;margin-top:4px;padding-top:4px;border-top:1px solid rgba(255,255,255,0.08);">`;
+          html += `置信区间: <span style="color:#94a3b8;">${pointData.confidence_lower.toFixed(1)}</span> ~ <span style="color:#94a3b8;">${pointData.confidence_upper.toFixed(1)}</span></div>`;
         }
+        html += `<div style="font-size:11px;margin-top:4px;color:${isPred ? '#fbbf24' : '#34d399'};">● ${isPred ? 'AI 预测值' : '实时采样'}</div>`;
         return html;
       },
     },
-    grid: { top: 20, right: 20, bottom: 30, left: 45 },
+    grid: { top: 35, right: 22, bottom: 32, left: 50, containLabel: false },
     xAxis: {
       type: 'category',
-      data: currentPrediction.points.map(p => p.timestamp),
-      axisLine: { lineStyle: { color: '#e2e8f0' } },
+      data: points.map(p => p.timestamp),
+      boundaryGap: false,
+      axisLine: { lineStyle: { color: '#e2e8f0', width: 1 } },
       axisTick: { show: false },
-      axisLabel: { 
-        color: '#94a3b8', 
-        fontSize: 9,
-        interval: Math.floor(currentPrediction.points.length / 8),
+      axisLabel: {
+        color: '#94a3b8',
+        fontSize: 10,
+        fontFamily: 'monospace',
+        interval: Math.max(1, Math.floor(points.length / 12)),
+        rotate: 0,
       },
+      splitLine: { show: false },
     },
     yAxis: {
       type: 'value',
       min: 0,
-      max: 100,
-      splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } },
-      axisLabel: { color: '#94a3b8', fontSize: 9, formatter: '{value}' },
+      max: Math.ceil(100 * 1.15 / 5) * 5,
+      splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed', width: 1 } },
+      axisLabel: { color: '#94a3b8', fontSize: 10, formatter: '{value}%' },
+      axisLine: { show: false },
+      axisTick: { show: false },
+    },
+    visualMap: {
+      show: false,
+      pieces: [
+        { lte: splitIndex - 1, color: '#10b981' },
+        { gt: splitIndex - 1, color: seriesColor },
+      ],
+      seriesIndex: 0,
     },
     series: [
       {
+        name: currentPrediction.metric_name,
         type: 'line',
-        data: currentPrediction.points.map(p => p.value),
-        smooth: true,
-        symbol: 'none',
-        lineStyle: { width: 2, color: '#3b82f6' },
+        data: points.map((p, i) => ({
+          value: p.value,
+          itemStyle: {
+            color: i >= splitIndex
+              ? hexToRgba(seriesColor, 1)
+              : (i === splitIndex - 1 ? '#10b981' : 'transparent'),
+            borderColor: i === splitIndex - 1 ? '#fff' : 'transparent',
+            borderWidth: i === splitIndex - 1 ? 2 : 0,
+            shadowBlur: i === splitIndex - 1 ? 8 : 0,
+            shadowColor: i === splitIndex - 1 ? 'rgba(16,185,129,0.5)' : 'transparent',
+          }
+        })),
+        smooth: 0.35,
+        symbol: (val: number, params: any) => {
+          const idx = params.dataIndex;
+          if (!hasActualData) return 'none';
+          if (idx === splitIndex - 1) return 'circle';
+          if (idx === splitIndex && predPoints.length > 0) return 'diamond';
+          return 'none';
+        },
+        symbolSize: (val: number, params: any) => {
+          const idx = params.dataIndex;
+          if (idx === splitIndex - 1) return 7;
+          if (idx === splitIndex && predPoints.length > 0) return 5;
+          return 0;
+        },
+        lineStyle: {
+          width: 2.5,
+          cap: 'round',
+          join: 'round',
+          color: {
+            type: 'linear', x: 0, y: 0, x2: 1, y2: 0,
+            colorStops: [
+              { offset: 0, color: '#10b981' },
+              { offset: hasActualData ? Math.max(0.01, (splitIndex - 1) / Math.max(points.length, 1)) : 0.5, color: '#10b981' },
+              { offset: hasActualData ? Math.min(0.99, splitIndex / Math.max(points.length, 1)) : 0.5, color: seriesColor },
+              { offset: 1, color: seriesColor },
+            ]
+          } as any,
+        },
         areaStyle: {
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(59,130,246,0.2)' },
-            { offset: 1, color: 'rgba(59,130,246,0.01)' },
+            { offset: 0, color: hexToRgba('#10b981', 0.18) },
+            { offset: hasActualData ? (splitIndex / Math.max(points.length, 1)) * 0.7 + 0.2 : 0.5, color: hexToRgba(seriesColor, 0.12) },
+            { offset: 1, color: 'rgba(0,0,0,0)' },
           ]),
         },
         markLine: {
           silent: true,
-          symbol: 'none',
-          data: [
-            { 
-              yAxis: currentPrediction.warning_threshold,
-              lineStyle: { color: '#ef4444', type: 'dashed', width: 1 },
-              label: { show: true, position: 'end', formatter: '警告阈值', fontSize: 9, color: '#ef4444' },
-            },
-          ],
+          symbol: ['none', 'none'],
+          lineStyle: { type: 'dashed', width: 1, color: '#ef4444' },
+          label: { show: true, position: 'insideEndTop', fontSize: 9, color: '#ef4444', fontWeight: 'bold', formatter: '⚠ 阈线' },
+          data: [{ yAxis: currentPrediction.warning_threshold }],
         },
+        markArea: hasActualData && predPoints.length > 0 ? {
+          silent: true,
+          itemStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: hexToRgba(seriesColor, 0.06) },
+              { offset: 1, color: hexToRgba(seriesColor, 0.02) },
+            ]),
+          },
+          data: [[
+            { xAxis: points[splitIndex]?.timestamp || '' },
+            { xAxis: points[points.length - 1]?.timestamp || '' },
+          ]],
+        } : undefined,
+        markPoint: hasActualData ? {
+          data: [
+            {
+              coord: [splitIndex - 1, actualPoints[actualPoints.length - 1]?.value || 0],
+              symbol: 'none',
+              label: {
+                show: true,
+                position: 'right',
+                offset: [5, 0],
+                color: '#10b981',
+                fontSize: 10,
+                fontWeight: 'bold',
+                formatter: '▎ 实时',
+                backgroundColor: 'rgba(16,185,129,0.08)',
+                borderRadius: 4,
+                padding: [2, 6],
+              }
+            },
+            ...(predPoints.length > 0 ? [{
+              coord: [splitIndex, predPoints[0]?.value || 0],
+              symbol: 'none',
+              label: {
+                show: true,
+                position: 'left',
+                offset: [-5, 0],
+                color: seriesColor,
+                fontSize: 10,
+                fontWeight: 'bold',
+                formatter: '预测 ▎',
+                backgroundColor: hexToRgba(seriesColor, 0.08),
+                borderRadius: 4,
+                padding: [2, 6],
+              }
+            }] : []),
+          ],
+          animation: true,
+          animationDelay: 300,
+        } : undefined,
       },
+      ...(predPoints.some(p => p.confidence_lower !== undefined) ? [{
+        name: '置信上限',
+        type: 'line',
+        data: points.map(p => p.is_predicted ? p.confidence_upper ?? null : null),
+        smooth: 0.3,
+        symbol: 'none',
+        lineStyle: { width: 1, type: 'dotted', color: hexToRgba(seriesColor, 0.35) },
+      }, {
+        name: '置信下限',
+        type: 'line',
+        data: points.map(p => p.is_predicted ? p.confidence_lower ?? null : null),
+        smooth: 0.3,
+        symbol: 'none',
+        lineStyle: { width: 1, type: 'dotted', color: hexToRgba(seriesColor, 0.35) },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: hexToRgba(seriesColor, 0.1) },
+            { offset: 1, color: hexToRgba(seriesColor, 0.02) },
+          ]),
+        },
+      }] : []),
     ],
   };
 
@@ -352,8 +561,8 @@ export function TrendPredictPanel() {
               key={h}
               onClick={() => setTimeRange(h)}
               className={`px-3 py-1 text-xs rounded-lg transition-colors ${
-                timeRange === h 
-                  ? 'bg-blue-500 text-white' 
+                timeRange === h
+                  ? 'bg-blue-500 text-white'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
@@ -361,48 +570,102 @@ export function TrendPredictPanel() {
             </button>
           ))}
         </div>
-        <button
-          onClick={fetchData}
-          className="flex items-center gap-2 px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          刷新
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsLive(!isLive)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg transition-colors ${
+              isLive ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-gray-100 text-gray-500'
+            }`}
+          >
+            <span className={`relative flex h-2 w-2 ${isLive ? '' : 'opacity-30'}`}>
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${isLive ? 'bg-emerald-400' : 'bg-gray-400'} opacity-75`}></span>
+              <span className={`relative inline-flex rounded-full h-2 w-2 ${isLive ? 'bg-emerald-500' : 'bg-gray-400'}`}></span>
+            </span>
+            实时{isLive ? `(${LIVE_INTERVAL_MS / 1000}s)` : '(已暂停)'}
+          </button>
+          <button
+            onClick={() => { fetchData(); setLiveBuffer({}); setLiveTimestamps({}); }}
+            className="flex items-center gap-2 px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            刷新
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-3">
-        {data.predictions.map((pred, idx) => (
-          <div
-            key={pred.metric_name}
-            onClick={() => setActiveMetric(idx)}
-            className={`p-3 rounded-xl border cursor-pointer transition-all ${
-              activeMetric === idx 
-                ? 'border-blue-300 bg-blue-50' 
-                : 'border-gray-100 hover:border-gray-200 bg-gray-50'
-            }`}
-          >
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-medium text-gray-600">{pred.metric_name}</span>
-              {pred.trend === '上升' ? (
-                <TrendingUp className="w-3.5 h-3.5 text-red-500" />
-              ) : pred.trend === '下降' ? (
-                <TrendingDown className="w-3.5 h-3.5 text-green-500" />
-              ) : (
-                <Minus className="w-3.5 h-3.5 text-gray-400" />
-              )}
+        {data.predictions.map((pred, idx) => {
+          const keyMap: Record<string, string> = { 'CPU 使用率': 'cpu', '内存使用率': 'memory', '磁盘使用率': 'disk', 'GPU 使用率': 'gpu', '网络流量': 'network' };
+          const mKey = keyMap[pred.metric_name];
+          const hasLiveData = mKey && (liveBuffer[mKey] || []).length > 0;
+          return (
+            <div
+              key={pred.metric_name}
+              onClick={() => setActiveMetric(idx)}
+              className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                activeMetric === idx 
+                  ? 'border-blue-300 bg-blue-50' 
+                  : 'border-gray-100 hover:border-gray-200 bg-gray-50'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-medium text-gray-600">{pred.metric_name}</span>
+                  {isLive && hasLiveData && (
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                    </span>
+                  )}
+                </div>
+                {pred.trend === '上升' ? (
+                  <TrendingUp className="w-3.5 h-3.5 text-red-500" />
+                ) : pred.trend === '下降' ? (
+                  <TrendingDown className="w-3.5 h-3.5 text-green-500" />
+                ) : (
+                  <Minus className="w-3.5 h-3.5 text-gray-400" />
+                )}
+              </div>
+              <div className="text-lg font-bold text-gray-800">
+                {pred.current_value.toFixed(1)}<span className="text-xs text-gray-400 ml-1">{pred.unit}</span>
+              </div>
+              <div className={`text-xs mt-1 ${pred.predicted_change > 0 ? 'text-red-500' : pred.predicted_change < 0 ? 'text-green-500' : 'text-gray-500'}`}>
+                预测 {pred.predicted_change > 0 ? '+' : ''}{pred.predicted_change.toFixed(1)}{pred.unit}
+              </div>
             </div>
-            <div className="text-lg font-bold text-gray-800">
-              {pred.current_value.toFixed(1)}<span className="text-xs text-gray-400 ml-1">{pred.unit}</span>
-            </div>
-            <div className={`text-xs mt-1 ${pred.predicted_change > 0 ? 'text-red-500' : pred.predicted_change < 0 ? 'text-green-500' : 'text-gray-500'}`}>
-              预测 {pred.predicted_change > 0 ? '+' : ''}{pred.predicted_change.toFixed(1)}{pred.unit}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
-      <div className="bg-gray-50 rounded-xl p-4">
-        <ReactECharts option={chartOption} style={{ height: 220 }} opts={{ renderer: 'svg' }} />
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 pt-4 pb-0">
+          <div className="flex items-center gap-5 text-xs">
+            <span className="flex items-center gap-1.5 font-medium">
+              <span className="w-3 h-0.5 bg-emerald-500 rounded-full"></span>
+              <span className="text-emerald-600">实时采样</span>
+            </span>
+            <span className="flex items-center gap-1.5 font-medium">
+              <span className="w-3 h-0.5 rounded-full" style={{ backgroundColor: seriesColor }}></span>
+              <span style={{ color: seriesColor }}>趋势预测</span>
+            </span>
+            {predPoints.some(p => p.confidence_lower !== undefined) && (
+              <span className="flex items-center gap-1.5 font-medium text-gray-400">
+                <span className="w-6 border-t border-dashed" style={{ borderColor: hexToRgba(seriesColor, 0.35) }}></span>
+                置信区间
+              </span>
+            )}
+          </div>
+          {isLive && hasActualData && (
+            <span className="flex items-center gap-1.5 text-xs text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              LIVE
+            </span>
+          )}
+        </div>
+        <ReactECharts option={chartOption} style={{ height: 280 }} opts={{ renderer: 'canvas' }} notMerge />
       </div>
 
       {data.anomalies.length > 0 && (
@@ -435,8 +698,20 @@ export function TrendPredictPanel() {
         <p className="text-sm text-blue-800">{data.summary}</p>
       </div>
 
-      <div className="text-xs text-gray-400 text-center pt-2 border-t border-gray-100">
-        预测时间: {data.prediction_time} · 预测范围: {data.time_horizon_hours}小时
+      <div className="text-xs text-gray-400 text-center pt-2 border-t border-gray-100 flex items-center justify-center gap-3">
+        {isLive && (
+          <span className="flex items-center gap-1 text-emerald-500">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+            </span>
+            实时更新中
+          </span>
+        )}
+        <span>预测时间: {data.prediction_time}</span>
+        <span>·</span>
+        <span>预测范围: {data.time_horizon_hours}小时</span>
+        {isLive && <span>· 刷新间隔: {LIVE_INTERVAL_MS / 1000}s</span>}
       </div>
     </div>
   );

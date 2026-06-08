@@ -14,6 +14,16 @@ class ChatRequest(BaseModel):
     conversation_id: Optional[str] = Field(None, description="会话ID")
 
 
+class ThinkRequest(BaseModel):
+    question: str = Field(..., description="用户的运维问题", min_length=1, max_length=2000)
+    capabilities: Dict[str, Any] = Field(
+        default_factory=lambda: {"thinking": True, "web_search": False},
+        description="启用的能力: thinking, web_search, reflection, auto_retry, search_count"
+    )
+    conversation_id: Optional[str] = Field(None, description="会话ID")
+    system_instructions: Optional[str] = Field(None, description="自定义系统指令")
+
+
 class CasualChatRequest(BaseModel):
     question: str = Field(..., description="用户的问题", min_length=1, max_length=2000)
     conversation_id: Optional[str] = Field(None, description="会话ID")

@@ -23,6 +23,7 @@ import {
   Archive,
   Lightbulb,
 } from 'lucide-react';
+import ReactECharts from 'echarts-for-react';
 import type {
   MonitoringModuleData,
   PredictionModuleData,
@@ -76,6 +77,14 @@ function getPriorityColor(priority: string) {
   }
 }
 
+function generateMockHistory(current: number, count: number = 20): Array<{ time: string; value: number }> {
+  const now = Date.now();
+  return Array.from({ length: count }, (_, i) => ({
+    time: new Date(now - (count - i) * 3000).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    value: Math.max(0, Math.min(100, current + (Math.random() - 0.5) * 15 + Math.sin(i * 0.5) * 8)),
+  }));
+}
+
 function MiniChart({ data, color }: { data: Array<{ time: string; value: number }>; color: string }) {
   if (!data || data.length === 0) return null;
   const max = Math.max(...data.map((d) => d.value));
@@ -88,9 +97,7 @@ function MiniChart({ data, color }: { data: Array<{ time: string; value: number 
       return `${x},${y}`;
     })
     .join(' ');
-
   const strokeColor = color === 'emerald' ? '#10b981' : color === 'amber' ? '#f59e0b' : color === 'red' ? '#ef4444' : '#6366f1';
-
   return (
     <svg viewBox="0 0 100 100" className="w-full h-10" preserveAspectRatio="none">
       <defs>
@@ -105,8 +112,201 @@ function MiniChart({ data, color }: { data: Array<{ time: string; value: number 
   );
 }
 
+const CHART_COLORS = {
+  cpu: { main: '#3b82f6', gradient1: 'rgba(59,130,246,0.25)', gradient2: 'rgba(59,130,246,0)' },
+  memory: { main: '#8b5cf6', gradient1: 'rgba(139,92,246,0.25)', gradient2: 'rgba(139,92,246,0)' },
+  disk: { main: '#f59e0b', gradient1: 'rgba(245,158,11,0.25)', gradient2: 'rgba(245,158,11,0)' },
+  network: { main: '#10b981', gradient1: 'rgba(16,185,129,0.25)', gradient2: 'rgba(16,185,129,0)' },
+  gpu: { main: '#ef4444', gradient1: 'rgba(239,68,68,0.25)', gradient2: 'rgba(239,68,68,0)' },
+};
+
+function getChartColor(label: string) {
+  if (label.includes('cpu')) return CHART_COLORS.cpu;
+  if (label.includes('memory') || label.includes('mem')) return CHART_COLORS.memory;
+  if (label.includes('disk')) return CHART_COLORS.disk;
+  if (label.includes('net')) return CHART_COLORS.network;
+  if (label.includes('gpu')) return CHART_COLORS.gpu;
+  return CHART_COLORS.cpu;
+}
+
+function CpuLineChart({ metric }: { metric: import('../types/moduleData').MetricInfo }) {
+  const history = metric.history?.length ? metric.history : generateMockHistory(metric.current);
+  const color = getChartColor(metric.label);
+  const option = {
+    tooltip: { trigger: 'axis', backgroundColor: 'rgba(255,255,255,0.96)', borderColor: '#e5e7eb', textStyle: { color: '#374151', fontSize: 11 }, formatter: (p: any) => `${p[0]?.value}%` },
+    grid: { top: 10, right: 12, bottom: 20, left: 36 },
+    xAxis: { type: 'category', data: history.map((_, i) => i), show: false, boundaryGap: false },
+    yAxis: { type: 'value', min: 0, max: 100, splitLine: { lineStyle: { color: '#f3f4f6', type: 'dashed' } }, axisLabel: { show: false } },
+    series: [{
+      type: 'line',
+      data: history.map(h => h.value),
+      smooth: true,
+      symbol: 'none',
+      lineStyle: { width: 2.5, color: color.main },
+      areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: color.gradient1 }, { offset: 1, color: color.gradient2 }] } },
+    }],
+  };
+  return <ReactECharts option={option} style={{ height: 100 }} opts={{ renderer: 'svg' }} notMerge />;
+}
+
+function MemoryAreaChart({ metric }: { metric: import('../types/moduleData').MetricInfo }) {
+  const history = metric.history?.length ? metric.history : generateMockHistory(metric.current);
+  const color = getChartColor(metric.label);
+  const option = {
+    tooltip: { trigger: 'axis', backgroundColor: 'rgba(255,255,255,0.96)', borderColor: '#e5e7eb', textStyle: { color: '#374151', fontSize: 11 }, formatter: (p: any) => `${p[0]?.value}${metric.unit}` },
+    grid: { top: 10, right: 12, bottom: 20, left: 36 },
+    xAxis: { type: 'category', data: history.map((_, i) => i), show: false, boundaryGap: false },
+    yAxis: { type: 'value', min: 0, splitLine: { lineStyle: { color: '#f3f4f6', type: 'dashed' } }, axisLabel: { show: false } },
+    series: [{
+      type: 'line',
+      data: history.map(h => h.value),
+      smooth: 0.4,
+      symbol: 'circle',
+      symbolSize: 4,
+      itemStyle: { color: color.main },
+      lineStyle: { width: 2, color: color.main },
+      areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: color.gradient1 }, { offset: 1, color: color.gradient2 }] } },
+      markLine: { silent: true, data: [{ yAxis: 80, lineStyle: { color: '#f59e0b', type: 'dashed', width: 1 }, label: { show: false } }, { yAxis: 90, lineStyle: { color: '#ef4444', type: 'dashed', width: 1 }, label: { show: false } }] },
+    }],
+  };
+  return <ReactECharts option={option} style={{ height: 100 }} opts={{ renderer: 'svg' }} notMerge />;
+}
+
+function DiskDonutChart({ metric }: { metric: import('../types/moduleData').MetricInfo }) {
+  const used = parseFloat(String(metric.current));
+  const remaining = Math.max(0, 100 - used);
+  const statusColor = metric.status === 'critical' ? '#ef4444' : metric.status === 'warning' ? '#f59e0b' : '#10b981';
+  const option = {
+    tooltip: { trigger: 'item', backgroundColor: 'rgba(255,255,255,0.96)', borderColor: '#e5e7eb', textStyle: { color: '#374151', fontSize: 11 }, formatter: '{b}: {c}{d}%' },
+    legend: { bottom: 0, itemWidth: 10, itemHeight: 10, itemGap: 12, textStyle: { fontSize: 10, color: '#6b7280' } },
+    series: [{
+      type: 'pie',
+      radius: ['52%', '72%'],
+      center: ['50%', '45%'],
+      avoidLabelOverlap: false,
+      label: { show: true, position: 'center', formatter: `{d}%`, fontSize: 18, fontWeight: 'bold', color: '#1f2937' },
+      labelLine: { show: false },
+      data: [
+        { value: used, name: '已使用', itemStyle: { color: statusColor, borderRadius: 4 } },
+        { value: remaining, name: '剩余空间', itemStyle: { color: '#f3f4f6', borderRadius: 4 } },
+      ],
+      emphasis: { scale: true, scaleSize: 5, itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: 'rgba(0,0,0,0.15)' } },
+    }],
+  };
+  return <ReactECharts option={option} style={{ height: 150 }} opts={{ renderer: 'svg' }} notMerge />;
+}
+
+function NetworkBarChart({ metric }: { metric: import('../types/moduleData').MetricInfo }) {
+  const history = metric.history?.length ? metric.history : generateMockHistory(Math.min(metric.current * 0.8, 100));
+  const color = getChartColor(metric.label);
+  const option = {
+    tooltip: { trigger: 'axis', backgroundColor: 'rgba(255,255,255,0.96)', borderColor: '#e5e7eb', textStyle: { color: '#374151', fontSize: 11 }, formatter: (p: any) => `${p[0]?.value} ${metric.unit}` },
+    grid: { top: 10, right: 12, bottom: 20, left: 40 },
+    xAxis: { type: 'category', data: history.slice(-8).map((h, i) => `${i + 1}`), axisLine: { show: false }, axisTick: { show: false }, axisLabel: { fontSize: 9, color: '#9ca3af' } },
+    yAxis: { type: 'value', min: 0, splitLine: { lineStyle: { color: '#f3f4f6', type: 'dashed' } }, axisLabel: { show: false } },
+    series: [{
+      type: 'bar',
+      data: history.slice(-8).map(h => h.value),
+      barWidth: '50%',
+      itemStyle: {
+        color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: color.main }, { offset: 1, color: color.gradient1.replace('0.25', '0.6') }] },
+        borderRadius: [4, 4, 0, 0],
+      },
+    }],
+  };
+  return <ReactECharts option={option} style={{ height: 100 }} opts={{ renderer: 'svg' }} notMerge />;
+}
+
+function GpuGaugeChart({ metric }: { metric: import('../types/moduleData').MetricInfo }) {
+  const val = parseFloat(String(metric.current));
+  const isTemp = metric.name.includes('温度') || metric.label.includes('temp');
+  const gaugeColor = metric.status === 'critical' ? ['#ef4444', '#f97316'] : metric.status === 'warning' ? ['#f59e0b', '#fbbf24'] : ['#10b981', '#34d399'];
+  const option = {
+    series: [{
+      type: 'gauge',
+      startAngle: 220,
+      endAngle: -40,
+      min: 0,
+      max: 100,
+      radius: '90%',
+      center: ['50%', '55%'],
+      progress: { show: true, width: 14, itemStyle: { color: { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: gaugeColor[0] }, { offset: 1, color: gaugeColor[1] }] } } },
+      axisLine: { lineStyle: { width: 14, color: [[1, '#f3f4f6']] } },
+      axisTick: { show: false },
+      splitLine: { length: 6, lineStyle: { width: 1, color: '#e5e7eb' } },
+      axisLabel: { distance: 18, fontSize: 9, color: '#9ca3af', formatter: '{value}' },
+      pointer: { icon: 'path://M12.8,0.7l12,40.1H0.7L12.8,0.7z', length: '65%', width: 5, offsetCenter: [0, -4], itemStyle: { color: '#6b7280' } },
+      anchor: { show: true, size: 12, itemStyle: { borderWidth: 2, borderColor: '#fff', color: gaugeColor[0] } },
+      title: { show: false },
+      detail: { valueAnimation: true, fontSize: 22, fontWeight: 'bold', color: '#1f2937', offsetCenter: [0, 16], formatter: `{value}\n{unit|${metric.unit}}`, rich: { unit: { fontSize: 10, color: '#9ca3af', lineHeight: 24 } } },
+      data: [{ value: val }],
+    }],
+  };
+  return <ReactECharts option={option} style={{ height: 140 }} opts={{ renderer: 'svg' }} notMerge />;
+}
+
+function FreqRadarChart({ metric }: { metric: import('../types/moduleData').MetricInfo }) {
+  const val = parseFloat(String(metric.current));
+  const option = {
+    tooltip: { trigger: 'item', backgroundColor: 'rgba(255,255,255,0.96)', borderColor: '#e5e7eb', textStyle: { color: '#374151', fontSize: 11 }, formatter: () => `${val} ${metric.unit}` },
+    polar: { radius: '70%', center: ['50%', '55%'] },
+    angleAxis: { max: Math.max(val * 1.5, 100), startAngle: 90, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { show: false }, splitLine: { lineStyle: { color: '#f3f4f6', type: 'dashed' } } },
+    radiusAxis: { axisLine: { show: false }, axisLabel: { show: false } },
+    series: [{
+      type: 'bar',
+      coordinateSystem: 'polar',
+      data: [val],
+      barWidth: '60%',
+      itemStyle: { color: { type: 'radial', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: '#3b82f6' }, { offset: 1, color: '#93c5fd' }] }, borderRadius: 3 },
+    }],
+  };
+  return <ReactECharts option={option} style={{ height: 120 }} opts={{ renderer: 'svg' }} notMerge />;
+}
+
+function MetricCard({ metric, span = 1 }: { metric: import('../types/moduleData').MetricInfo; span?: number }) {
+  const isCpuUsage = metric.label === 'cpu_usage';
+  const isCpuFreq = metric.label === 'cpu_freq';
+  const isMemory = metric.label.startsWith('memory_');
+  const isDisk = metric.label.startsWith('disk_');
+  const isNetwork = metric.label.startsWith('net_');
+  const isGpuUsage = metric.label.includes('gpu') && metric.label.includes('usage');
+  const isGpuTemp = metric.label.includes('gpu') && metric.label.includes('temp');
+
+  const chartHeight = isDisk ? 160 : isGpuUsage || isGpuTemp ? 145 : isCpuFreq ? 125 : 105;
+
+  return (
+    <div className={`rounded-xl border border-gray-200 bg-white overflow-hidden ${span > 1 ? 'col-span-2' : ''}`}>
+      <div className="px-3 py-2.5 flex items-center justify-between border-b border-gray-50">
+        <span className="text-xs font-semibold text-gray-700">{metric.name}</span>
+        <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${getStatusBg(metric.status)}`}>
+          {metric.status === 'normal' ? '正常' : metric.status === 'warning' ? '警告' : '严重'}
+        </span>
+      </div>
+      <div className="px-3 pb-2 pt-1" style={{ height: chartHeight }}>
+        {isCpuUsage && <CpuLineChart metric={metric} />}
+        {isCpuFreq && <FreqRadarChart metric={metric} />}
+        {isMemory && <MemoryAreaChart metric={metric} />}
+        {isDisk && <DiskDonutChart metric={metric} />}
+        {isNetwork && <NetworkBarChart metric={metric} />}
+        {(isGpuUsage || isGpuTemp) && <GpuGaugeChart metric={metric} />}
+        {!isCpuUsage && !isCpuFreq && !isMemory && !isDisk && !isNetwork && !isGpuUsage && !isGpuTemp && (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center">
+              <span className="text-2xl font-bold text-gray-900">{metric.current}</span>
+              <span className="text-sm text-gray-500 ml-1">{metric.unit}</span>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function MonitoringModule({ data }: { data: MonitoringModuleData['data'] }) {
   const metrics = data?.metrics ?? [];
+  const alerts = data?.alerts ?? [];
+  const topology = data?.topology;
+  const timeRange = data?.timeRange ?? '—';
 
   return (
     <div className="space-y-4">
@@ -117,7 +317,7 @@ export function MonitoringModule({ data }: { data: MonitoringModuleData['data'] 
           </div>
           <div>
             <h3 className="font-semibold text-gray-800">实时监控面板</h3>
-            <p className="text-xs text-gray-500">时间范围: {data?.timeRange ?? '—'}</p>
+            <p className="text-xs text-gray-500">时间范围: {timeRange}</p>
           </div>
         </div>
         <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 rounded-full border border-emerald-200">
@@ -133,35 +333,18 @@ export function MonitoringModule({ data }: { data: MonitoringModuleData['data'] 
         {metrics.length === 0 ? (
           <div className="col-span-2 rounded-xl border border-gray-200 p-6 bg-white text-center text-sm text-gray-500">暂无指标数据</div>
         ) : (
-          metrics.map((metric) => (
-            <div
-              key={metric.label}
-              className="rounded-xl border border-gray-200 p-3 bg-white"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-medium text-gray-600">{metric.name}</span>
-                <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusBg(metric.status)}`}>
-                  {metric.status === 'normal' ? '正常' : metric.status === 'warning' ? '警告' : '严重'}
-                </span>
-              </div>
-              <div className="flex items-baseline gap-1 mb-2">
-                <span className="text-lg font-bold text-gray-900">{metric.current}</span>
-                <span className="text-xs text-gray-500">{metric.unit}</span>
-              </div>
-              <MiniChart data={metric.history ?? []} color={metric.status === 'normal' ? 'emerald' : metric.status === 'warning' ? 'amber' : 'red'} />
-            </div>
-          ))
+          metrics.map((metric) => <MetricCard key={metric.label} metric={metric} />)
         )}
       </div>
 
-      {data.topology && (
+      {topology && topology.nodes && topology.nodes.length > 0 && (
         <div className="rounded-xl border border-gray-200 p-3 bg-white">
           <div className="flex items-center gap-2 mb-3">
             <GitBranch size={14} className="text-indigo-500" />
             <span className="text-xs font-semibold text-gray-700">服务拓扑</span>
           </div>
           <div className="flex flex-wrap gap-2">
-            {data.topology.nodes.map((node) => (
+            {topology.nodes.map((node) => (
               <div key={node.name} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 border border-gray-100">
                 <span className={`w-2 h-2 rounded-full ${
                   node.status === 'healthy' ? 'bg-emerald-500' : node.status === 'warning' ? 'bg-amber-500' : 'bg-red-500'
@@ -180,13 +363,13 @@ export function MonitoringModule({ data }: { data: MonitoringModuleData['data'] 
         </div>
       )}
 
-      {data.alerts && data.alerts.length > 0 && (
+      {alerts && alerts.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <AlertTriangle size={14} className="text-red-500" />
-            <span className="text-xs font-semibold text-gray-700">活跃告警 ({data.alerts.length})</span>
+            <span className="text-xs font-semibold text-gray-700">活跃告警 ({alerts.length})</span>
           </div>
-          {data.alerts.map((alert, i) => (
+          {alerts.map((alert, i) => (
             <div key={i} className="flex items-start gap-2 p-3 rounded-xl bg-red-50 border border-red-100">
               <AlertTriangle size={14} className="text-red-500 shrink-0 mt-0.5" />
               <div>
@@ -202,6 +385,7 @@ export function MonitoringModule({ data }: { data: MonitoringModuleData['data'] 
 }
 
 export function PredictionModule({ data }: { data: PredictionModuleData['data'] }) {
+  if (!data || !data.predictions) return <div className="text-sm text-gray-500">暂无预测数据</div>;
   const actualPoints = data.predictions.filter((p) => !p.isPredicted);
   const predictedPoints = data.predictions.filter((p) => p.isPredicted);
 
@@ -296,6 +480,7 @@ export function PredictionModule({ data }: { data: PredictionModuleData['data'] 
 }
 
 export function DiagnosisModule({ data }: { data: DiagnosisModuleData['data'] }) {
+  if (!data) return <div className="text-sm text-gray-500">暂无诊断数据</div>;
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -389,6 +574,7 @@ export function DiagnosisModule({ data }: { data: DiagnosisModuleData['data'] })
 }
 
 export function KnowledgeModule({ data }: { data: KnowledgeModuleData['data'] }) {
+  if (!data) return <div className="text-sm text-gray-500">暂无知识库数据</div>;
   const incidentSources = data.sources?.filter(s => s.type === 'incident_record') || [];
   const practiceSources = data.sources?.filter(s => s.type === 'best_practice') || [];
   const otherSources = data.sources?.filter(s => s.type !== 'incident_record' && s.type !== 'best_practice') || [];
@@ -550,6 +736,7 @@ export function KnowledgeModule({ data }: { data: KnowledgeModuleData['data'] })
 }
 
 export function AutomationModule({ data }: { data: AutomationModuleData['data'] }) {
+  if (!data) return <div className="text-sm text-gray-500">暂无自动化数据</div>;
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   Bot,
   User,
@@ -17,11 +18,15 @@ import {
   AlertTriangle,
   Server,
 } from 'lucide-react';
-import type { Message, ChatMode, IntermediateStep } from '../types';
+import type { Message, ChatMode, IntermediateStep, AIOperationData } from '../types';
 import {
   VisualRenderer,
   type VisualizationData,
 } from './VisualComponents';
+import AIOperationCard from './AIOperationCard';
+import SearchResultsPanel from './SearchResultsPanel';
+import ThinkingProcessPanel from './ThinkingProcessPanel';
+import ToolCallPanel from './ToolCallPanel';
 import {
   ModularAnalysisRenderer,
   generateModularResponse,
@@ -67,6 +72,10 @@ function parseVisualizations(content: string): { cleanContent: string; visualiza
 }
 
 function detectAndGenerateVisualizations(content: string): VisualizationData[] {
+  //排除功能介绍、帮助类恢复，避免误触发模拟数据图表
+  if (/你可以|我能|帮助|功能|能力|介绍|你好|我是|智能运维助手|可以帮你|有什么具体问题吗|绝不猜测/i.test(content) || content.length < 100) {
+    return [];
+  }
   const vizzes: VisualizationData[] = [];
 
   if (/CPU|内存|磁盘|网络|监控指标|使用率/i.test(content) && !content.includes('[[')) {
@@ -343,11 +352,42 @@ export default function MessageBubble({ message, onEdit }: MessageBubbleProps) {
     if (message.visualizations && message.visualizations.length > 0) {
       return message.visualizations;
     }
-    
-    if (!message.isStreaming && message.content && !message.moduleData) {
+
+    if (!message.isStreaming && message.content && !message.moduleData && !message.thinkingSteps) {
       return detectAndGenerateVisualizations(message.content);
     }
     return [];
+  };
+
+  const fixMarkdownTables = (content: string): string => {
+    let fixed = content;
+    const lines = content.split('\n');
+    const result: string[] = [];
+    let inTable = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const isTableRow = line.trim().startsWith('|') || line.trim().match(/^\|?[\s-:]+\|?$/);
+
+      if (isTableRow && !inTable) {
+        inTable = true;
+        result.push(line);
+      } else if (isTableRow && inTable) {
+        result.push(line);
+      } else if (!isTableRow && inTable) {
+        inTable = false;
+        result.push('');
+        result.push(line);
+      } else {
+        result.push(line);
+      }
+    }
+
+    if (inTable) {
+      result.push('');
+    }
+
+    return result.join('\n');
   };
 
   const getCleanContent = (): string => {
@@ -355,7 +395,7 @@ export default function MessageBubble({ message, onEdit }: MessageBubbleProps) {
       const { cleanContent } = parseVisualizations(message.content);
       return cleanContent || message.content;
     }
-    return message.content;
+    return fixMarkdownTables(message.content);
   };
 
   if (isUser) {
@@ -437,9 +477,22 @@ export default function MessageBubble({ message, onEdit }: MessageBubbleProps) {
             <ThinkingAnimation />
           ) : (
             <>
-              <IntermediateSteps steps={message.intermediateSteps || []} />
+              {message.thinkingSteps && Object.keys(message.thinkingSteps).length > 0 && (
+                <ThinkingProcessPanel
+                  steps={message.thinkingSteps}
+                  isStreaming={message.isStreaming}
+                />
+              )}
 
-              {message.moduleData ? (
+              {message.searchResults && (
+                <SearchResultsPanel
+                  results={message.searchResults.results}
+                  engine={message.searchResults.engine}
+                  answer={message.searchResults.answer}
+                />
+              )}
+
+              {message.moduleData && !message.thinkingSteps && !message.searchResults ? (
                 <>
                   <div className="mb-3 rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
                     <div className={`px-3 py-2 border-b border-gray-100 flex items-center gap-2 ${
@@ -469,13 +522,22 @@ export default function MessageBubble({ message, onEdit }: MessageBubbleProps) {
                     </div>
                   </div>
                   <div className="markdown-body text-[15px] leading-relaxed text-gray-800">
-                    <ReactMarkdown>{getCleanContent()}</ReactMarkdown>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{getCleanContent()}</ReactMarkdown>
                   </div>
                 </>
               ) : (
                 <>
+                  {message.toolCalls && message.toolCalls.length > 0 && (
+                    <ToolCallPanel
+                      calls={message.toolCalls}
+                      isStreaming={message.isStreaming}
+                    />
+                  )}
+
+                  <IntermediateSteps steps={message.intermediateSteps || []} />
+
                   <div className="markdown-body text-[15px] leading-relaxed text-gray-800">
-                    <ReactMarkdown>{getCleanContent()}</ReactMarkdown>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{getCleanContent()}</ReactMarkdown>
                   </div>
                   {!message.isStreaming && (() => {
                     const vizzes = getVisualizations();
@@ -488,6 +550,25 @@ export default function MessageBubble({ message, onEdit }: MessageBubbleProps) {
                       </div>
                     );
                   })()}
+                  {message.operationData && !message.isStreaming && (
+                    <AIOperationCard
+                      operation={message.operationData}
+                      onConfirm={async (operationId, operationType, confirmedItems) => {
+                        const response = await fetch('/api/ai/execute', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            operation_id: operationId,
+                            operation_type: operationType,
+                            confirmed_items: confirmedItems,
+                            user_confirmation: true
+                          })
+                        });
+                        return await response.json();
+                      }}
+                      onCancel={() => {}}
+                    />
+                  )}
                 </>
               )}
 

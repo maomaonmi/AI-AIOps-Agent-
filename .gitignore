@@ -237,3 +237,13 @@ Thumbs.db
 .idea/
 # Logs
 *.log
+
+# IDE / Trae
+.trae/
+
+# Test files
+image.png
+test_images/
+
+# Data directory (may contain sensitive data)
+data/

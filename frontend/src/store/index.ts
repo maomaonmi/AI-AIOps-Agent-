@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Conversation, Message, ChatMode, UserProfile, LearningPath } from '../types';
+import type { AgentCapabilities, Conversation, Message, ChatMode, ThinkingOptions, UserProfile, LearningPath } from '../types';
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -16,6 +16,8 @@ interface AppState {
   activeConversationId: string | null;
   sidebarOpen: boolean;
   currentMode: ChatMode;
+  capabilities: AgentCapabilities;
+  thinkingOptions: ThinkingOptions;
   activeFeature: string | null;
   activeModuleType: string | null;
   floatingPanelType: string | null;
@@ -36,6 +38,9 @@ interface AppState {
   editAndResend: (conversationId: string, messageId: string, newContent: string) => void;
   setSidebarOpen: (open: boolean) => void;
   setCurrentMode: (mode: ChatMode) => void;
+  setCapability: (key: keyof AgentCapabilities, value: boolean) => void;
+  setCapabilities: (caps: Partial<AgentCapabilities>) => void;
+  setThinkingOptions: (options: Partial<ThinkingOptions>) => void;
   setActiveFeature: (feature: string | null) => void;
   setActiveModuleType: (moduleType: string | null) => void;
   setFloatingPanel: (panelType: string | null) => void;
@@ -58,6 +63,19 @@ export const useAppStore = create<AppState>()(
       activeConversationId: null,
       sidebarOpen: true,
       currentMode: 'casual',
+      capabilities: {
+        thinking: false,
+        web_search: false,
+        reflection: false,
+        auto_retry: false,
+        search_count: 10,
+      },
+      thinkingOptions: {
+        autoExpand: false,
+        showConfidence: true,
+        maxSteps: 10,
+        detailLevel: 'normal',
+      },
       activeFeature: null,
       activeModuleType: null,
       floatingPanelType: null,
@@ -216,6 +234,15 @@ export const useAppStore = create<AppState>()(
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
 
       setCurrentMode: (mode) => set({ currentMode: mode }),
+
+      setCapability: (key, value) =>
+        set((state) => ({ capabilities: { ...state.capabilities, [key]: value } })),
+
+      setCapabilities: (caps) =>
+        set((state) => ({ capabilities: { ...state.capabilities, ...caps } })),
+
+      setThinkingOptions: (options) =>
+        set((state) => ({ thinkingOptions: { ...state.thinkingOptions, ...options } })),
 
       setActiveFeature: (feature) => set({ activeFeature: feature }),
 

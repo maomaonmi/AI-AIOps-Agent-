@@ -1,4 +1,4 @@
-import type { ChatMode } from '../types';
+import type { AgentCapabilities, ChatMode } from '../types';
 
 const API_BASE = '/api';
 const DEFAULT_TIMEOUT = 120000;
@@ -7,6 +7,13 @@ export interface ChatRequest {
   question: string;
   mode: ChatMode;
   conversation_id?: string;
+}
+
+export interface ThinkRequest {
+  question: string;
+  capabilities: AgentCapabilities;
+  conversation_id?: string;
+  system_instructions?: string;
 }
 
 export interface ModuleDataWrapper {
@@ -28,7 +35,8 @@ export interface ChatResponse {
 }
 
 export interface StreamChunk {
-  type: 'status' | 'content' | 'module_data' | 'done' | 'error';
+  type: 'status' | 'content' | 'module_data' | 'done' | 'error' | 'thinking';
+  subtype?: string;
   message?: string;
   content?: string;
   data?: any;
@@ -36,6 +44,7 @@ export interface StreamChunk {
   success?: boolean;
   error?: string;
   elapsed?: number;
+  step?: number;
 }
 
 interface FetchOptions {
@@ -198,6 +207,107 @@ export async function streamChatMessage(
             }
 
             if (chunk.type === 'done') {
+              return {
+                answer: fullAnswer || chunk.answer || '',
+                intermediate_steps: [],
+                success: chunk.success ?? true,
+                error: chunk.error || null,
+                module_data: moduleData,
+              };
+            }
+
+            if (chunk.type === 'error') {
+              return null;
+            }
+          } catch (e) {
+            console.warn('Failed to parse SSE chunk:', line, e);
+          }
+        }
+      }
+    }
+
+    return null;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        if (signal?.aborted) {
+          throw new RequestAbortedError('Request cancelled by user');
+        }
+        throw new TimeoutError(`Request timed out after ${timeout / 1000} seconds`);
+      }
+    }
+    throw error;
+  }
+}
+
+export async function streamThinkMessage(
+  request: ThinkRequest,
+  onChunk: (chunk: StreamChunk) => void,
+  options?: FetchOptions
+): Promise<ChatResponse | null> {
+  const timeout = options?.timeout ?? 300000;
+  const signal = options?.signal;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+  const combinedSignal = signal
+    ? AbortSignal.any ? AbortSignal.any([signal, controller.signal]) : controller.signal
+    : controller.signal;
+
+  try {
+    const response = await fetch(`${API_BASE}/chat/think/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+      signal: combinedSignal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      throw new Error(`API error (${response.status}): ${errorText}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('No reader available');
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let fullAnswer = '';
+    let moduleData = null;
+    let memoryData = null;
+    let executorStats = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const chunk: StreamChunk = JSON.parse(line.slice(6));
+            onChunk(chunk);
+
+            if (chunk.type === 'content' && chunk.content) {
+              fullAnswer += chunk.content;
+            }
+
+            if (chunk.type === 'module_data' && chunk.data) {
+              moduleData = chunk.data;
+            }
+
+            if (chunk.type === 'done') {
+              if (chunk.data) {
+                memoryData = chunk.data.memory;
+                executorStats = chunk.data.executor_stats;
+              }
               return {
                 answer: fullAnswer || chunk.answer || '',
                 intermediate_steps: [],

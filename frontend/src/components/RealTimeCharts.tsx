@@ -4,6 +4,7 @@ import {
   Activity,
   AlertTriangle,
   AlertCircle,
+  CheckCircle,
   Clock,
   Zap,
   Brain,
@@ -14,6 +15,9 @@ import {
   Play,
   Minus,
   TrendingDown as TrendingDownIcon,
+  Sparkles,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 
 // ==================== Real-time Data Simulator ====================
@@ -306,135 +310,207 @@ export function LiveLineChart({
 
 // ==================== Anomaly Detection Chart ====================
 export function AnomalyDetectionChart({ data }: { data: Array<{ time: string; value: number; baseline: number; status: 'normal' | 'warning' | 'anomaly' }> }) {
-  const width = 420;
-  const height = 140;
+  const width = 500;
+  const height = 180;
   const values = data.map(d => Math.max(d.value, d.baseline));
-  const maxVal = Math.max(...values) * 1.2 || 100;
-  const minVal = Math.min(...values) * 0.8 || 0;
+  const maxVal = Math.max(...values) * 1.15 || 100;
+  const minVal = Math.min(...values, ...data.map(d => d.baseline)) * 0.85 || 0;
   const range = maxVal - minVal || 1;
 
-  // Use full width of viewBox with small padding
-  const padX = width * 0.03;
-  const padY = height * 0.1;
+  const padX = width * 0.05;
+  const padY = height * 0.15;
   const chartW = width - padX * 2;
   const chartH = height - padY * 2;
 
   const baselinePoints = data.map((d, i) => {
-    const x = padX + (i / (data.length - 1)) * chartW;
+    const x = padX + (i / Math.max(data.length - 1, 1)) * chartW;
     const y = padY + chartH - ((d.baseline - minVal) / range) * chartH;
     return `${x},${y}`;
   }).join(' ');
 
   const valuePoints = data.map((d, i) => {
-    const x = padX + (i / (data.length - 1)) * chartW;
+    const x = padX + (i / Math.max(data.length - 1, 1)) * chartW;
     const y = padY + chartH - ((d.value - minVal) / range) * chartH;
     return `${x},${y}`;
   }).join(' ');
 
-  // Upper/lower bounds (baseline ± 2*std)
-  const std = 10;
+  const std = 12;
   const upperBound = data.map((_, i) => {
-    const x = padX + (i / (data.length - 1)) * chartW;
+    const x = padX + (i / Math.max(data.length - 1, 1)) * chartW;
     const b = data[i].baseline;
     const y = padY + chartH - (((b + std * 2) - minVal) / range) * chartH;
     return `${x},${y}`;
   }).join(' ');
   
   const lowerBound = data.map((_, i) => {
-    const x = padX + (i / (data.length - 1)) * chartW;
+    const x = padX + (i / Math.max(data.length - 1, 1)) * chartW;
     const b = data[i].baseline;
     const y = padY + chartH - (((b - std * 2) - minVal) / range) * chartH;
     return `${x},${y}`;
   }).reverse().join(' ');
 
+  const hasAnomaly = data.some(d => d.status === 'anomaly');
+  const hasWarning = data.some(d => d.status === 'warning');
+
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden p-3 flex flex-col">
-      <div className="flex items-center justify-between mb-2 shrink-0">
-        <span className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
-          <Activity size={13} className="text-red-500" />
-          异常检测 — 实时监控
-        </span>
-        <div className="flex items-center gap-2 text-[10px]">
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> 正常</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500"></span> 偏离</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500"></span> 异常</span>
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-gray-50/80">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-gradient-to-br from-red-50 to-orange-50 rounded-xl">
+            <Activity size={16} className="text-red-500" />
+          </div>
+          <div>
+            <span className="text-sm font-bold text-gray-800">异常检测 — 实时监控</span>
+            {hasAnomaly && (
+              <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-600 animate-pulse">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                检测到异常
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-4 text-xs font-medium">
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-emerald-100"></span> 正常</span>
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-400 ring-2 ring-amber-100"></span> 偏离</span>
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-red-100"></span> 异常</span>
         </div>
       </div>
 
-      <div className="flex-1 min-h-[120px]">
-        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full" preserveAspectRatio="xMidYMid meet">
+      <div className="p-4 pb-3">
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto" preserveAspectRatio="xMidYMid meet">
         <defs>
-          <linearGradient id="anomalyBand" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#ef4444" stopOpacity="0.08" />
-            <stop offset="100%" stopColor="#ef4444" stopOpacity="0.02" />
+          <linearGradient id="anomalyBandGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#f87171" stopOpacity="0.12" />
+            <stop offset="50%" stopColor="#fca5a5" stopOpacity="0.06" />
+            <stop offset="100%" stopColor="#fca5a5" stopOpacity="0.02" />
           </linearGradient>
+          <linearGradient id="valueLineGrad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#6366f1" />
+            <stop offset="50%" stopColor="#818cf8" />
+            <stop offset="100%" stopColor="#a78bfa" />
+          </linearGradient>
+          <linearGradient id="areaFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#6366f1" stopOpacity="0.15" />
+            <stop offset="100%" stopColor="#6366f1" stopOpacity="0.01" />
+          </linearGradient>
+          <filter id="glowAnomaly" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          <filter id="shadowDrop">
+            <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#000" floodOpacity="0.08"/>
+          </filter>
         </defs>
 
+        {/* Grid lines */}
+        {[0, 0.25, 0.5, 0.75, 1].map(pct => (
+          <line key={`grid-${pct}`} x1={padX} y1={padY + chartH * (1-pct)} x2={padX + chartW} y2={padY + chartH * (1-pct)} stroke="#f1f5f9" strokeWidth="1" strokeDasharray="4,4" />
+        ))}
+
         {/* Confidence band */}
-        <polygon points={`${upperBound} ${lowerBound}`} fill="url(#anomalyBand)" />
+        <polygon points={`${upperBound} ${lowerBound}`} fill="url(#anomalyBandGrad)" />
+
+        {/* Area fill under value line */}
+        <polygon points={`${padX},${padY + chartH} ${valuePoints} ${padX + chartW},${padY + chartH}`} fill="url(#areaFill)" />
 
         {/* Baseline */}
-        <polyline points={baselinePoints} fill="none" stroke="#9ca3af" strokeWidth="1.5" strokeDasharray="4,3" />
+        <polyline points={baselinePoints} fill="none" stroke="#cbd5e1" strokeWidth="1.8" strokeDasharray="6,4" strokeLinecap="round" />
 
-        {/* Value line */}
-        <polyline points={valuePoints} fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        {/* Value line with gradient */}
+        <polyline points={valuePoints} fill="none" stroke="url(#valueLineGrad)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" filter="url(#shadowDrop)" />
 
         {/* Anomaly highlight zones */}
         {data.map((d, i) => {
           if (d.status === 'normal') return null;
-          const x = padX + (i / (data.length - 1)) * chartW;
-          const bgColor = d.status === 'anomaly' ? 'rgba(239,68,68,0.12)' : 'rgba(245,158,11,0.1)';
-          const zoneWidth = chartW / data.length * 0.8;
+          const x = padX + (i / Math.max(data.length - 1, 1)) * chartW;
+          const zoneWidth = chartW / Math.max(data.length, 1) * 0.7;
           return (
-            <rect key={i} x={x - zoneWidth/2} y={padY} width={zoneWidth} height={chartH} rx="2" fill={bgColor} />
+            <rect key={i} x={x - zoneWidth/2} y={padY} width={zoneWidth} height={chartH} rx="4" 
+              fill={d.status === 'anomaly' ? 'rgba(239,68,68,0.06)' : 'rgba(245,158,11,0.05)'}
+              stroke={d.status === 'anomaly' ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.12)'} strokeWidth="1"
+            >
+              {d.status === 'anomaly' && (
+                <animate attributeName="opacity" values="0.6;1;0.6" dur="2s" repeatCount="indefinite" />
+              )}
+            </rect>
           );
         })}
 
         {/* Data points with status coloring */}
         {data.map((d, i) => {
-          const x = padX + (i / (data.length - 1)) * chartW;
+          const x = padX + (i / Math.max(data.length - 1, 1)) * chartW;
           const y = padY + chartH - ((d.value - minVal) / range) * chartH;
-          const dotColor = d.status === 'anomaly' ? '#ef4444' : d.status === 'warning' ? '#f59e0b' : '#6366f1';
+          
+          if (d.status === 'anomaly') return (
+            <g key={i}>
+              <circle cx={x} cy={y} r="10" fill="#ef4444" opacity="0.15">
+                <animate attributeName="r" values="8;14;8" dur="1.5s" repeatCount="indefinite" />
+                <animate attributeName="opacity" values="0.25;0.08;0.25" dur="1.5s" repeatCount="indefinite" />
+              </circle>
+              <circle cx={x} cy={y} r="5" fill="#fff" stroke="#ef4444" strokeWidth="2.5" filter="url(#glowAnomaly)" />
+              <circle cx={x} cy={y} r="2" fill="#ef4444" />
+            </g>
+          );
+          
+          if (d.status === 'warning') return (
+            <g key={i}>
+              <circle cx={x} cy={y} r="7" fill="#f59e0b" opacity="0.12">
+                <animate attributeName="r" values="5;9;5" dur="2s" repeatCount="indefinite" />
+              </circle>
+              <circle cx={x} cy={y} r="4" fill="#fff" stroke="#f59e0b" strokeWidth="2" />
+              <circle cx={x} cy={y} r="1.5" fill="#f59e0b" />
+            </g>
+          );
+
           return (
-            <circle key={i} cx={x} cy={y} r={d.status !== 'normal' ? 4 : 2.5} 
-              fill={dotColor}
-              stroke="white" strokeWidth={d.status !== 'normal' ? 2 : 1.5}
-              opacity={d.status === 'normal' ? 0.8 : 1}
-            >
-              {d.status !== 'normal' && (
-                <animate attributeName="r" values="4;6;4" dur="1.5s" repeatCount="indefinite" />
-              )}
-            </circle>
+            <circle key={i} cx={x} cy={y} r="2.5" fill="#6366f1" opacity="0.7" stroke="#fff" strokeWidth="1" />
           );
         })}
 
         {/* Time labels */}
-        {data.filter((_, i) => i % 4 === 0).map((d, i) => {
-          const filtered = data.filter((_, j) => j % 4 === 0);
+        {data.filter((_, i) => i % Math.ceil(data.length / 6) === 0).map((d, i) => {
+          const filtered = data.filter((_, j) => j % Math.ceil(data.length / 6) === 0);
           const pos = filtered.indexOf(d);
-          const x = padX + (pos / (filtered.length - 1)) * chartW;
-          return <text key={i} x={x} y={padY + chartH + 12} fontSize="9" fill="#9ca3af" textAnchor="middle">{d.time}</text>;
+          const x = padX + (pos / Math.max(filtered.length - 1, 1)) * chartW;
+          return <text key={i} x={x} y={padY + chartH + 16} fontSize="10" fill="#94a3b8" textAnchor="middle" fontWeight="500">{d.time}</text>;
         })}
         </svg>
       </div>
 
       {/* Anomaly alerts */}
-      <div className="mt-2 space-y-1.5 shrink-0">
-        {data.filter(d => d.status !== 'normal').slice(0, 3).map((d, i) => (
-          <div key={i} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs ${
-            d.status === 'anomaly' ? 'bg-red-50 border border-red-100' : 'bg-amber-50 border border-amber-100'
+      <div className="px-5 pb-4 space-y-2">
+        {data.filter(d => d.status !== 'normal').slice(0, 4).map((d, i) => (
+          <div key={i} className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs transition-all ${
+            d.status === 'anomaly' 
+              ? 'bg-gradient-to-r from-red-50 to-orange-50 border border-red-100/60' 
+              : 'bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-100/60'
           }`}>
-            <AlertCircle size={12} className={
-              d.status === 'anomaly' ? 'text-red-500 shrink-0' : 'text-amber-500 shrink-0'
-            } />
-            <span className="font-medium text-gray-800">{d.time}</span>
-            <span className={
-              d.status === 'anomaly' ? 'text-red-600' : 'text-amber-600'
-            }>
-              {d.status === 'anomaly' ? `异常! 值=${d.value}，基线=${d.baseline}` : `偏离警告 偏差=${(d.value - d.baseline).toFixed(1)}`}
+            <div className={`p-1.5 rounded-lg ${
+              d.status === 'anomaly' ? 'bg-red-100' : 'bg-amber-100'
+            }`}>
+              <AlertCircle size={13} className={
+                d.status === 'anomaly' ? 'text-red-500' : 'text-amber-500'
+              } />
+            </div>
+            <span className="font-bold text-gray-700 w-12">{d.time}</span>
+            <span className="flex-1 font-medium">
+              {d.status === 'anomaly' ? (
+                <><span className="text-red-600 font-bold">异常!</span> <span className="text-gray-600">值=<span className="font-mono font-bold">{d.value}</span>，基线=<span className="font-mono">{d.baseline}</span></span></>
+              ) : (
+                <><span className="text-amber-600 font-semibold">偏离警告</span> <span className="text-gray-500">偏差=</span><span className="font-mono font-bold text-amber-700">{(d.value - d.baseline).toFixed(1)}</span></>
+              )}
             </span>
           </div>
         ))}
+        {!hasAnomaly && !hasWarning && (
+          <div className="flex items-center justify-center gap-2 py-3 px-3.5 bg-emerald-50/60 rounded-xl border border-emerald-100/50">
+            <CheckCircle size={14} className="text-emerald-500" />
+            <span className="text-xs font-medium text-emerald-700">系统运行正常，未检测到异常</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -448,125 +524,235 @@ export function CapacityPlanningChart({ data }: { data: Array<{ date: string; cp
     return i === target;
   });
 
+  const metrics = [
+    { label: 'CPU 使用率', key: 'cpu' as const, color: '#6366f1', gradientFrom: '#818cf8', gradientTo: '#c7d2fe', warn: 80, crit: 90, icon: '⚡' },
+    { label: '内存使用率', key: 'memory' as const, color: '#8b5cf6', gradientFrom: '#a78bfa', gradientTo: '#ddd6fe', warn: 85, crit: 95, icon: '🧠' },
+  ];
+
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className="px-3 py-2.5 border-b border-gray-100 flex items-center justify-between">
-        <span className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
-          <BarChart3 size={13} className="text-purple-500" />
-          容量规划预测（未来7天）
-        </span>
-        <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-gray-50/80">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-gradient-to-br from-violet-50 to-purple-50 rounded-xl">
+            <BarChart3 size={16} className="text-violet-500" />
+          </div>
+          <span className="text-sm font-bold text-gray-800">容量规划预测（未来7天）</span>
+        </div>
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-gradient-to-r from-violet-100 to-purple-100 text-violet-700">
+          <Sparkles size={12} />
           AI 预测
         </span>
       </div>
 
-      <div className="p-3 space-y-3">
+      <div className="p-5 space-y-5">
         
         {/* CPU & Memory bars */}
-        {[
-          { label: 'CPU 使用率', key: 'cpu' as const, color: '#6366f1', warn: 80, crit: 90 },
-          { label: '内存使用率', key: 'memory' as const, color: '#8b5cf6', warn: 85, crit: 95 },
-        ].map(metric => (
-          <div key={metric.key}>
-            <div className="flex justify-between items-center mb-1">
-              <span className="text-[11px] font-medium text-gray-600">{metric.label}</span>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-gray-400">今日 {(data[todayIdx]?.[metric.key] ?? 0).toFixed(1)}%</span>
-                <span className="text-[10px] font-bold tabular-nums" style={{ color: metric.color }}>
-                  → {(data[data.length - 1]?.[metric.key] ?? 0).toFixed(1)}%
-                </span>
-              </div>
-            </div>
-            <div className="h-2 bg-gray-100 rounded-full overflow-hidden relative">
-              {/* Warning zone */}
-              <div className="absolute inset-y-0 left-0 rounded-l-full" style={{ 
-                width: `${metric.warn}%`, backgroundColor: `${metric.color}15`,
-                right: `${100-metric.warn}%`
-              }} />
-              {/* Critical zone */}
-              <div className="absolute inset-y-0 rounded-r-full" style={{ 
-                width: `${metric.crit - metric.warn}%`, backgroundColor: `${metric.color}25`,
-                left: `${metric.warn}%`
-              }} />
-              
-              {data.map((d, i) => {
-                const val = d[metric.key];
-                const isToday = i === todayIdx;
-                const isFuture = i > todayIdx;
-                const pct = Math.min(val, 100);
-                
-                return (
-                  <div
-                    key={i}
-                    className={`absolute top-0 bottom-0 rounded-full transition-all ${
-                      isToday ? 'z-20 ring-2 ring-offset-1' : isFuture ? 'opacity-70 z-10' : ''
-                    }`}
-                    style={{
-                      width: `${pct}%`,
-                      backgroundColor: metric.color,
-                      left: 0,
-                      ...(isToday ? { ringColor: metric.color, '--tw-ring-offset-color': 'white' } : {}),
-                    }}
-                  >
-                    {isToday && (
-                      <div className="absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap">
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor: metric.color, color: 'white' }}>
-                          今天
-                        </span>
-                      </div>
-                    )}
+        {metrics.map(metric => {
+          const todayVal = data[todayIdx]?.[metric.key] ?? 0;
+          const futureVal = data[data.length - 1]?.[metric.key] ?? 0;
+          const isCritical = futureVal >= metric.crit;
+          const isWarning = futureVal >= metric.warn && futureVal < metric.crit;
+          const trend = futureVal - todayVal;
+          
+          return (
+            <div key={metric.key} className="group">
+              <div className="flex justify-between items-center mb-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">{metric.icon}</span>
+                  <span className="text-xs font-bold text-gray-700">{metric.label}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <span className="text-[10px] text-gray-400 block leading-tight">今日</span>
+                    <span className="text-sm font-bold tabular-nums" style={{ color: metric.color }}>{todayVal.toFixed(1)}%</span>
                   </div>
-                );
-              })}
+                  <div className={`flex flex-col items-center ${trend > 5 ? 'text-red-400' : trend > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                    <svg width="16" height="10" viewBox="0 0 16 10">
+                      <path d={trend >= 0 ? "M1 9L8 2L15 9" : "M1 1L8 8L15 1"} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    <span className="text-[10px] font-bold tabular-nums">{trend > 0 ? '+' : ''}{trend.toFixed(1)}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-gray-400 block leading-tight">预测</span>
+                    <span className={`text-sm font-bold tabular-nums ${isCritical ? 'text-red-500' : isWarning ? 'text-amber-500' : ''}`} style={{ color: !isCritical && !isWarning ? metric.color : undefined }}>
+                      {futureVal.toFixed(1)}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="relative h-4 bg-gray-50 rounded-full overflow-hidden ring-1 ring-gray-100">
+                {/* Background zones */}
+                <div className="absolute inset-y-0 left-0 rounded-l-full transition-all" style={{ 
+                  width: `${metric.warn}%`, 
+                  background: `linear-gradient(90deg, ${metric.color}08, ${metric.color}15)`,
+                }} />
+                <div className="absolute inset-y-0 rounded-r-full transition-all" style={{ 
+                  width: `${metric.crit - metric.warn}%`, 
+                  left: `${metric.warn}%`,
+                  background: `linear-gradient(90deg, ${metric.color}20, ${metric.color}30)`,
+                }} />
+                
+                {/* Progress bars for each day */}
+                {data.map((d, i) => {
+                  const val = d[metric.key];
+                  const isToday = i === todayIdx;
+                  const isFuture = i > todayIdx;
+                  const pct = Math.min(val, 100);
+                  
+                  return (
+                    <div
+                      key={i}
+                      className={`absolute top-0 bottom-0 rounded-full transition-all duration-300 ${
+                        isToday ? 'z-30 shadow-lg scale-y-110 origin-left' : isFuture ? 'z-10 opacity-60' : 'z-5'
+                      }`}
+                      style={{
+                        width: `${Math.max(pct, 2)}%`,
+                        background: `linear-gradient(90deg, ${metric.gradientFrom}, ${metric.color})`,
+                        left: 0,
+                        boxShadow: isToday ? `0 0 12px ${metric.color}40` : undefined,
+                      }}
+                    >
+                      {isToday && (
+                        <>
+                          <div className="absolute inset-0 bg-white/30 animate-pulse"></div>
+                          <div className="absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap z-40">
+                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-md shadow-sm" 
+                              style={{ 
+                                background: `linear-gradient(135deg, ${metric.color}, ${metric.gradientFrom})`, 
+                                color: 'white',
+                                fontSize: '10px'
+                              }}>
+                              今天
+                            </span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+                
+                {/* Threshold markers */}
+                <div className="absolute top-0 bottom-0 flex items-center justify-center z-20" style={{ left: `${metric.warn}%` }}>
+                  <div className="w-0.5 h-full bg-amber-400/50"></div>
+                  <div className="absolute -bottom-4 w-1 h-1 rounded-full bg-amber-400"></div>
+                </div>
+                <div className="absolute top-0 bottom-0 flex items-center justify-center z-20" style={{ left: `${metric.crit}%` }}>
+                  <div className="w-0.5 h-full bg-red-400/50"></div>
+                  <div className="absolute -bottom-4 w-1 h-1 rounded-full bg-red-400"></div>
+                </div>
+              </div>
+              
+              <div className="flex justify-between mt-1.5 px-1">
+                <span className="text-[9px] text-gray-300 font-medium">0%</span>
+                <span className="text-[9px] font-medium" style={{ color: metric.color, opacity: 0.7 }}>⚠ {metric.warn}%</span>
+                <span className="text-[9px] text-red-400 font-medium">● {metric.crit}%</span>
+                <span className="text-[9px] text-gray-300 font-medium">100%</span>
+              </div>
+              
+              {(isCritical || isWarning) && (
+                <div className={`mt-2 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium ${
+                  isCritical 
+                    ? 'bg-red-50 text-red-600 border border-red-100' 
+                    : 'bg-amber-50 text-amber-600 border border-amber-100'
+                }`}>
+                  <AlertTriangle size={11} />
+                  {isCritical 
+                    ? `预计第${data.length - 1}天将达到临界值 ${futureVal.toFixed(1)}%`
+                    : `预计第${data.length - 1}天将接近警告阈值 ${futureVal.toFixed(1)}%`
+                  }
+                </div>
+              )}
             </div>
-            <div className="flex justify-between mt-0.5">
-              <span className="text-[9px] text-gray-400">0%</span>
-              <span className="text-[9px]" style={{ color: metric.color }}>⚠ {metric.warn}%</span>
-              <span className="text-[9px] text-red-400">🔴 {metric.crit}%</span>
-              <span className="text-[9px] text-gray-400">100%</span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
 
         {/* Disk gauge */}
-        <div className="mt-3 pt-3 border-t border-gray-100">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-[11px] font-medium text-gray-600">磁盘空间</span>
-            <span className="text-[10px] text-gray-400">
-              {data[todayIdx]?.diskUsed ?? 0} / {data[todayIdx]?.diskTotal ?? 1024} GB
+        <div className="pt-4 mt-2 border-t border-gray-100/80">
+          <div className="flex justify-between items-center mb-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm">💾</span>
+              <span className="text-xs font-bold text-gray-700">磁盘空间</span>
+            </div>
+            <span className="text-xs text-gray-500 font-mono">
+              <span className="font-bold text-gray-700">{data[todayIdx]?.diskUsed ?? 0}</span> / <span>{data[todayIdx]?.diskTotal ?? 1024} GB</span>
             </span>
           </div>
           
-          <div className="grid grid-cols-7 gap-1.5">
+          <div className="grid grid-cols-7 gap-2">
             {data.map((d, i) => {
-              const pct = (d.diskUsed / d.diskTotal) * 100;
+              const pct = (d.diskUsed / Math.max(d.diskTotal, 1)) * 100;
               const isToday = i === todayIdx;
               const isFuture = i > todayIdx;
               const willFull = pct >= 90;
+              const willWarn = pct >= 85 && pct < 90;
+              
+              let bgColor: string;
+              let textColor: string;
+              if (willFull) {
+                bgColor = `conic-gradient(from 180deg, #ef4444 ${pct * 0.98}%, #fef2f2 ${pct}%)`;
+                textColor = '#ef4444';
+              } else if (willWarn) {
+                bgColor = `conic-gradient(from 180deg, #f59e0b ${pct * 0.98}%, #fffbeb ${pct}%)`;
+                textColor = '#f59e0b';
+              } else {
+                bgColor = `conic-gradient(from 180deg, #6366f1 ${pct * 0.98}%, #eef2ff ${pct}%)`;
+                textColor = '#374151';
+              }
               
               return (
-                <div key={i} className="text-center">
-                  <div className={`relative w-full aspect-square rounded-lg flex items-end justify-center pb-0.5 transition-all ${
-                    isToday ? 'ring-2 ring-indigo-400 scale-105 z-10' : isFuture ? '' : ''
+                <div key={i} className="group relative">
+                  <div className={`relative aspect-square rounded-xl flex flex-col items-center justify-center transition-all duration-300 ${
+                    isToday 
+                      ? 'ring-2 ring-indigo-400 ring-offset-2 scale-105 shadow-lg z-10 bg-white' 
+                      : isFuture 
+                        ? 'opacity-65' 
+                        : ''
                   }`} style={{
-                    background: willFull 
-                      ? `conic-gradient(${pct > 95 ? '#ef4444' : pct > 85 ? '#f59e0b' : '#6366f1'} ${pct}%, #f3f4f6 ${pct}%)`
-                      : `conic-gradient(#6366f1 ${pct}%, #f3f4f6 ${pct}%)`,
-                    opacity: isFuture ? 0.7 : 1,
+                    background: isToday ? 'white' : undefined,
                   }}>
-                    <span className="text-[9px] font-bold tabular-nums" style={{
-                      color: willFull ? (pct > 95 ? '#ef4444' : '#f59e0b') : '#374151'
-                    }}>
+                    {!isToday && (
+                      <div className="absolute inset-0 rounded-xl" style={{ background: bgColor }}></div>
+                    )}
+                    {isToday && (
+                      <div className="absolute inset-0 rounded-xl" style={{ background: bgColor }}></div>
+                    )}
+                    
+                    <span className="text-[11px] font-bold tabular-nums relative z-10" style={{ color: isToday ? '#4f46e5' : textColor }}>
                       {pct.toFixed(0)}%
                     </span>
+                    
+                    {isToday && (
+                      <span className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-indigo-500 rounded-full ring-2 ring-white z-20">
+                        <span className="absolute inset-0 rounded-full bg-indigo-400 animate-ping opacity-75"></span>
+                      </span>
+                    )}
+                    
+                    {(willFull || willWarn) && !isToday && (
+                      <div className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full z-20"
+                        style={{ backgroundColor: willFull ? '#ef4444' : '#f59e0b' }}
+                      ></div>
+                    )}
                   </div>
-                  <span className={`text-[9px] mt-1 block ${isToday ? 'font-bold text-indigo-600' : 'text-gray-400'}`}>
+                  <span className={`text-[10px] mt-1.5 block text-center ${
+                    isToday ? 'font-bold text-indigo-600' : willFull ? 'font-semibold text-red-500' : willWarn ? 'font-medium text-amber-500' : 'text-gray-400'
+                  }`}>
                     {d.date}
                   </span>
                 </div>
               );
             })}
           </div>
+          
+          {data.some(d => (d.diskUsed / d.diskTotal) * 100 >= 90) && (
+            <div className="mt-4 flex items-start gap-2 p-3 bg-red-50/70 rounded-xl border border-red-100/60">
+              <AlertCircle size={14} className="text-red-500 mt-0.5 shrink-0" />
+              <div className="text-[11px] text-red-700">
+                <span className="font-bold">磁盘容量预警：</span>
+                预计未来7天内磁盘使用率将超过90%，建议提前清理或扩容
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -588,6 +774,8 @@ export function AutoRefreshContainer({
 }: AutoRefreshChartProps) {
   const [lastUpdate, setLastUpdate] = useState(new Date());
   const [isPaused, setIsPaused] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
   const countdownRef = useRef<number>(interval);
 
   useEffect(() => {
@@ -612,6 +800,16 @@ export function AutoRefreshContainer({
     return () => clearInterval(timer);
   }, [isPaused, interval]);
 
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+    document.addEventListener('keydown', handleEsc);
+    return () => document.removeEventListener('keydown', handleEsc);
+  }, [isFullscreen]);
+
   const formatTimeAgo = (date: Date) => {
     const diff = Date.now() - date.getTime();
     if (diff < 60000) return '刚刚';
@@ -619,8 +817,17 @@ export function AutoRefreshContainer({
     return `${Math.floor(diff / 3600000)}分钟前`;
   };
 
+  const toggleFullscreen = () => {
+    setIsFullscreen(!isFullscreen);
+  };
+
   return (
-    <div className={`rounded-xl border border-gray-200 bg-white overflow-hidden ${className}`}>
+    <div 
+      ref={containerRef}
+      className={`rounded-xl border border-gray-200 bg-white overflow-hidden transition-all duration-300 ${
+        isFullscreen ? 'fixed inset-4 z-[9999] rounded-2xl shadow-2xl' : ''
+      } ${className}`}
+    >
       <div className="px-3 py-2 bg-gradient-to-r from-slate-50 to-gray-50 border-b border-gray-100 flex items-center justify-between">
         <div className="flex items-center gap-2">
           {title && <span className="text-xs font-semibold text-gray-700">{title}</span>}
@@ -634,22 +841,35 @@ export function AutoRefreshContainer({
             </span>
           </div>
         </div>
-        <button
-          onClick={() => setIsPaused(!isPaused)}
-          className="p-1 rounded hover:bg-gray-200 text-gray-400 transition-colors"
-          title={isPaused ? '继续刷新' : '暂停刷新'}
-        >
-          {isPaused ? <Play size={13} /> : <Pause size={13} />}
-        </button>
-        <button
-          onClick={() => { setLastUpdate(new Date()); onRefresh?.(); }}
-          className="p-1 rounded hover:bg-indigo-50 text-indigo-400 hover:text-indigo-600 transition-colors"
-          title="立即刷新"
-        >
-          <RefreshCw size={13} className={isRefreshing ? 'animate-spin' : ''} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setIsPaused(!isPaused)}
+            className="p-1 rounded hover:bg-gray-200 text-gray-400 transition-colors"
+            title={isPaused ? '继续刷新' : '暂停刷新'}
+          >
+            {isPaused ? <Play size={13} /> : <Pause size={13} />}
+          </button>
+          <button
+            onClick={() => { setLastUpdate(new Date()); onRefresh?.(); }}
+            className="p-1 rounded hover:bg-indigo-50 text-indigo-400 hover:text-indigo-600 transition-colors"
+            title="立即刷新"
+          >
+            <RefreshCw size={13} className={isRefreshing ? 'animate-spin' : ''} />
+          </button>
+          <button
+            onClick={toggleFullscreen}
+            className={`p-1 rounded transition-colors ${
+              isFullscreen 
+                ? 'hover:bg-gray-200 text-gray-500 hover:text-gray-700' 
+                : 'hover:bg-violet-50 text-violet-400 hover:text-violet-600'
+            }`}
+            title={isFullscreen ? '退出全屏' : '全屏查看'}
+          >
+            {isFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+          </button>
+        </div>
       </div>
-      <div className="p-3">
+      <div className={`p-3 ${isFullscreen ? 'p-6 overflow-auto max-h-[calc(100vh-60px)]' : ''}`}>
         {children}
       </div>
     </div>
