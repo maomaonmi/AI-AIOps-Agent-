@@ -35,6 +35,7 @@
 - [优化策略](#-优化策略)
 - [未来计划](#-未来计划)
 - [项目统计](#-项目统计)
+- [常见问题解答](#-常见问题解答-faq)
 - [贡献指南](#-贡献指南)
 - [许可信息](#-许可信息)
 
@@ -62,6 +63,7 @@
 | 远程执行 | Paramiko | ≥3.4 | SSH 远程命令执行 |
 | ML 训练 | PEFT / Transformers | ≥0.7 / ≥4.36 | LoRA 微调与模型加载 |
 | 深度学习 | PyTorch | ≥2.1 | 模型推理后端 |
+| 网络搜索 | Tavily API | — | 实时联网信息检索（NEW） |
 
 ### 前端技术栈
 
@@ -75,19 +77,39 @@
 | 图标库 | Lucide React | 1.8 | 轻量 SVG 图标 |
 | 状态管理 | Zustand | 5.0 | 极简响应式 Store |
 | Markdown 渲染 | react-markdown | 10.1 | AI 回复富文本展示 |
+| GFM 表格支持 | remark-gfm | 4.0 | GitHub 风格 Markdown 表格渲染 |
 | PDF 导出 | html2pdf.js | 0.14 | 报告导出功能 |
 
 ---
 
 ## ✨ 项目亮点
 
-### 1. 🧠 ReAct 推理引擎 — 真实数据驱动的智能诊断
+### 1. 🧠 深度思考模式 — 类 DeepSeek/千问的推理过程展示
 
-采用 ReAct (Reasoning + Acting) 范式，Agent 在每一步推理后调用真实工具获取实时数据，而非猜测或编造。支持多步推理链，最多 5 轮工具调用，确保诊断结论基于真实系统状态。
+独创的深度思考模式，完整展示 AI 的推理过程。支持 **Thought → Action → Observation** 动态循环，用户可实时查看每一步思考、工具调用和结果分析。思考过程面板支持展开/折叠交互，工具调用面板展示执行详情，搜索结果面板采用右侧滑出设计，参考主流大模型厂商的最佳实践。
+
+**核心特性**：
+- 📋 **思考过程面板**：分层展示推理步骤，支持展开/折叠
+- 🔧 **工具调用面板**：展示工具名称、参数、执行时间、结果摘要
+- 🔍 **搜索结果面板**：右侧滑出设计，显示参考来源数量和详情
+- 📊 **结构化输出**：对比类问题自动生成多维度表格 + 深度分析 + 选型建议
+
+### 2. 🔄 Agent Loop (ReAct 模式) — 真正的动态推理引擎
+
+采用 ReAct (Reasoning + Acting) 范式，实现真正的 **Action-driven** 动态 Agent 循环，而非固定阶段式 Pipeline。Agent 根据每次 Observation 的结果动态决定下一步行动，支持最多 5 轮工具调用，确保诊断结论基于真实系统状态。
+
+**Agent 核心模块** (`agent/core/`)：
+- `agent_loop.py` — while 循环 + Thought/Action/Observation
+- `executor.py` — 统一工具调用 + 结果解析层
+- `memory.py` — 上下文管理 + 轻量压缩
 
 <img width="980" height="617" alt="image" src="https://github.com/user-attachments/assets/dbcc1804-769b-4e0a-9b13-9900df7513b2" />
 
-### 2. 🎯 分层提示词路由 — 模块专属规则引擎
+### 3. 🌐 联网搜索增强 — 实时信息获取
+
+集成 Tavily/Bing 搜索引擎，支持联网获取最新信息。用户可自由调整参考网页数量（3/5/8/10/15），搜索结果以右侧滑出面板展示，包含标题、来源、摘要等信息，确保 AI 回答基于最新、最准确的数据。
+
+### 4. 🎯 分层提示词路由 — 模块专属规则引擎
 
 创新性地设计了「意图分类 → 模块匹配 → 提示词组装 → 工具过滤」四层路由架构。每个运维模块（CPU/内存/磁盘/网络/GPU）拥有独立的详细规则模板，包含触发条件、工具调用流程、分析阈值、输出格式和图表要求，彻底解决"问什么都出图表"的问题。
 
@@ -215,12 +237,13 @@
 │                                 └────────┬───────────┘      │
 │                                          │                    │
 │  ┌───────────────────────────────────────┼──────────────┐   │
-│  │           Tool Registry (14 Tools)    │              │   │
+│  │           Tool Registry (16 Tools)    │              │   │
 │  │  cpu_check │ memory_check │ disk_check│              │   │
 │  │  network_check │ gpu_check │ system_health           │   │
 │  │  system_architecture │ trend_prediction              │   │
 │  │  sql_query │ prometheus_query │ ssh_exec             │   │
 │  │  log_search │ alert_query │ knowledge_search         │   │
+│  │  web_search │ script_executor  (NEW)                  │   │
 │  └───────────────────────────────────────┼──────────────┘   │
 └──────────────────────────────────────────┼──────────────────┘
                                            │
@@ -336,20 +359,23 @@
 
 ```
 frontend/src/
-├── components/          # 40+ 组件
+├── components/          # 50+ 组件
 │   ├── RealtimeMonitorPanel.tsx   # 实时监控主面板
-│   ├── MessageBubble.tsx          # 对话消息气泡
-│   ├── ChatInput.tsx              # 对话输入框
+│   ├── MessageBubble.tsx          # 对话消息气泡（支持 Markdown 表格）
+│   ├── ChatInput.tsx              # 对话输入框（深度思考开关 + 搜索数量调整）
+│   ├── ThinkingProcessPanel.tsx   # 深度思考过程面板（NEW）
+│   ├── ToolCallPanel.tsx          # 工具调用详情面板（NEW）
+│   ├── SearchResultsPanel.tsx     # 搜索结果右侧滑出面板（NEW）
 │   ├── ModuleVisualizations.tsx   # 模块可视化渲染器
 │   ├── QuickActionModal.tsx       # 快捷功能弹窗
 │   ├── Sidebar.tsx                # 侧边栏导航
 │   └── ...                        # 其他功能组件
 ├── services/
-│   └── api.ts                     # API 通信层（支持 SSE 流式）
+│   └── api.ts                     # API 通信层（支持 SSE 流式 + 深度思考接口）
 ├── store/
 │   └── index.ts                   # Zustand 全局状态管理
 ├── types/
-│   ├── index.ts                   # 核心类型定义
+│   ├── index.ts                   # 核心类型定义（含 AgentCapabilities）
 │   └── moduleData.ts              # 模块数据类型（634行）
 ├── utils/
 │   └── moduleAdapters.ts          # 模块数据适配器
@@ -793,6 +819,38 @@ docker-compose down
 2. 等待维护者确认并分配
 3. 开发完成后提交 PR
 4. 通过 Code Review 后合并
+
+---
+
+## ❓ 常见问题解答 (FAQ)
+
+### Q1: 如何启用深度思考模式？
+
+在对话输入框下方，找到「深度思考」开关，点击启用即可。启用后，AI 会展示完整的推理过程，包括每一步思考、工具调用和结果分析。
+
+### Q2: 如何调整搜索结果数量？
+
+启用「联网搜索」后，在输入框下方会出现「参考 X 个」下拉框，可选择 3/5/8/10/15 个参考网页。
+
+### Q3: 为什么表格显示不正确？
+
+本项目使用 `remark-gfm` 插件支持 GitHub 风格 Markdown 表格。如果表格内容溢出，前端会自动修复表格格式。请确保使用最新版本。
+
+### Q4: 如何切换云端/本地模型？
+
+在 `.env` 文件中设置 `LLM_MODE=cloud` 使用云端 API（需配置 `DASHSCOPE_API_KEY`），或设置 `LLM_MODE=local` 使用本地模型。
+
+### Q5: max_tokens 参数在哪里调整？
+
+- **云端模型**：`api/app.py` 第 81 行，默认 4096
+- **本地模型**：`api/app.py` 第 108-109 行，`max_new_tokens` 默认 2048
+
+### Q6: 如何添加新的工具？
+
+1. 在 `tools/` 目录下创建新的工具文件
+2. 继承 `BaseTool` 类，实现 `_run()` 方法
+3. 在 `agent/core/executor.py` 中注册工具
+4. 更新 `agent/prompts.py` 中的工具描述
 
 ---
 
