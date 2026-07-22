@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "skipLibCheck": true,
+    "strict": true,
+    "outDir": "dist-electron",
+    "rootDir": ".",
+    "types": ["node"]
+  },
+  "include": ["electron/**/*.ts", "shared/**/*.ts"]
+}

@@ -71,12 +71,13 @@ def get_llm():
     _model = _settings.DASHSCOPE_MODEL
 
     if _mode == "cloud" and _api_key:
-        logger.info(f"Loading cloud LLM: {_model}")
+        _base_url = getattr(_settings, 'LLM_BASE_URL', "https://dashscope.aliyuncs.com/compatible-mode/v1")
+        logger.info(f"Loading cloud LLM: {_model} ({_base_url})")
         from langchain_openai import ChatOpenAI
         return ChatOpenAI(
             model=_model,
             api_key=_api_key,
-            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            base_url=_base_url,
             temperature=0.1,
             max_tokens=4096,
             timeout=120,

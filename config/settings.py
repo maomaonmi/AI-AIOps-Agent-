@@ -42,3 +42,4 @@ AGENT_TIMEOUT = int(os.getenv("AGENT_TIMEOUT", "180"))
 LLM_MODE = os.getenv("LLM_MODE", "local")  # 'local' 或 'cloud'
 DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY", "")
 DASHSCOPE_MODEL = os.getenv("DASHSCOPE_MODEL", "qwen-plus")
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")

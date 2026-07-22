@@ -1,0 +1,8 @@
+appId: com.aiassistant.desktop
+productName: AI Assistant
+files:
+  - dist/**
+  - dist-electron/**
+  - package.json
+directories:
+  buildResources: assets
