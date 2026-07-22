@@ -94,6 +94,8 @@
 - 🔍 **搜索结果面板**：右侧滑出设计，显示参考来源数量和详情
 - 📊 **结构化输出**：对比类问题自动生成多维度表格 + 深度分析 + 选型建议
 
+<img width="670" height="614" alt="image" src="https://github.com/user-attachments/assets/8fc6ff20-cf5d-420f-9861-d11add3caccb" />
+
 ### 2. 🔄 Agent Loop (ReAct 模式) — 真正的动态推理引擎
 
 采用 ReAct (Reasoning + Acting) 范式，实现真正的 **Action-driven** 动态 Agent 循环，而非固定阶段式 Pipeline。Agent 根据每次 Observation 的结果动态决定下一步行动，支持最多 5 轮工具调用，确保诊断结论基于真实系统状态。
@@ -108,6 +110,8 @@
 ### 3. 🌐 联网搜索增强 — 实时信息获取
 
 集成 Tavily/Bing 搜索引擎，支持联网获取最新信息。用户可自由调整参考网页数量（3/5/8/10/15），搜索结果以右侧滑出面板展示，包含标题、来源、摘要等信息，确保 AI 回答基于最新、最准确的数据。
+
+<img width="1087" height="622" alt="image" src="https://github.com/user-attachments/assets/b03084eb-40c4-4907-85fd-1753251f8a59" />
 
 ### 4. 🎯 分层提示词路由 — 模块专属规则引擎
 
