@@ -302,6 +302,30 @@ const defaultToolbarColors = {
 };
 const toolbarColorPath = path.join(app.getPath('userData'), 'toolbar-colors.json');
 let toolbarColors = { ...defaultToolbarColors };
+let appTheme = 'dark';
+const themePath = path.join(app.getPath('userData'), 'app-theme.json');
+const loadTheme = async () => {
+    try {
+        const data = await fs.readFile(themePath, 'utf8');
+        const parsed = JSON.parse(data);
+        appTheme = parsed.theme === 'light' ? 'light' : 'dark';
+    }
+    catch {
+        appTheme = 'dark';
+    }
+    return appTheme;
+};
+const saveTheme = async (theme) => {
+    appTheme = theme;
+    await fs.mkdir(path.dirname(themePath), { recursive: true });
+    await fs.writeFile(themePath, JSON.stringify({ theme }, null, 2), 'utf8');
+    // 广播给所有窗口
+    BrowserWindow.getAllWindows().forEach((w) => {
+        if (!w.isDestroyed())
+            w.webContents.send('app:theme', theme);
+    });
+    return theme;
+};
 const defaultConfig = { apiKey: '', baseUrl: 'https://api.deepseek.com', model: 'deepseek-chat' };
 let deepseekConfig = { ...defaultConfig };
 const loadConfig = async () => {
@@ -331,9 +355,9 @@ const saveToolbarColors = async (next) => {
     toolbarColors = { ...toolbarColors, ...next };
     await fs.mkdir(path.dirname(toolbarColorPath), { recursive: true });
     await fs.writeFile(toolbarColorPath, JSON.stringify(toolbarColors, null, 2), 'utf8');
-    // 广播给所有窗口
-    [floatingWindow, mainWindow].forEach((w) => {
-        if (w && !w.isDestroyed())
+    // 广播给所有窗口（主窗口、悬浮窗、设置窗口、网页工具条、独立工具条）
+    BrowserWindow.getAllWindows().forEach((w) => {
+        if (!w.isDestroyed())
             w.webContents.send('toolbar:colors', toolbarColors);
     });
     return toolbarColors;
@@ -534,6 +558,90 @@ const analyzeWithDeepSeekStream = async (content, source, window) => {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[deepseek stream] error:', msg);
         window.webContents.send('stream:chunk', { done: false, error: `AI 调用异常：${msg}` });
+    }
+};
+// 流式调用 DeepSeek Vision（支持图片分析）
+const analyzeImageWithDeepSeekStream = async (image, prompt, window) => {
+    if (!deepseekConfig.apiKey) {
+        window.webContents.send('stream:chunk', { done: false, error: '未配置 DeepSeek API Key' });
+        return;
+    }
+    try {
+        // DeepSeek Vision API 格式（OpenAI 兼容）
+        const response = await fetch(`${deepseekConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${deepseekConfig.apiKey}`,
+            },
+            body: JSON.stringify({
+                model: deepseekConfig.model, // 使用配置的模型（如 deepseek-vision）
+                messages: [
+                    {
+                        role: 'user',
+                        content: [
+                            { type: 'text', text: prompt || '请详细描述这张图片的内容，并分析其中的关键信息。' },
+                            {
+                                type: 'image_url',
+                                image_url: {
+                                    url: `data:${image.mimeType};base64,${image.base64}`,
+                                },
+                            },
+                        ],
+                    },
+                ],
+                temperature: 0.2,
+                stream: true,
+            }),
+        });
+        if (!response.ok) {
+            const errorText = await response.text();
+            window.webContents.send('stream:chunk', { done: false, error: `AI 请求失败 (${response.status})` });
+            return;
+        }
+        if (!response.body) {
+            window.webContents.send('stream:chunk', { done: false, error: 'AI 未返回内容' });
+            return;
+        }
+        // 逐块读取 SSE 流
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let fullText = '';
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done)
+                break;
+            buffer += decoder.decode(value, { stream: true });
+            // SSE 格式：data: {...}\n\n
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+                if (!line.startsWith('data: '))
+                    continue;
+                const jsonStr = line.slice(6).trim();
+                if (jsonStr === '[DONE]')
+                    continue;
+                try {
+                    const data = JSON.parse(jsonStr);
+                    const chunk = data.choices?.[0]?.delta?.content;
+                    if (chunk) {
+                        fullText += chunk;
+                        window.webContents.send('stream:chunk', { done: false, chunk, fullText });
+                    }
+                }
+                catch {
+                    // 忽略解析错误
+                }
+            }
+        }
+        window.webContents.send('stream:chunk', { done: true, fullText });
+        console.log(`[deepseek vision] completed, total ${fullText.length} chars`);
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[deepseek vision] error:', msg);
+        window.webContents.send('stream:chunk', { done: false, error: `图片分析异常：${msg}` });
     }
 };
 const createSelectionToolbar = () => {
@@ -1011,6 +1119,13 @@ app.whenReady().then(async () => {
             analyzeWithDeepSeekStream(content, source, win);
         }
     });
+    // 图片分析（多模态）
+    ipcMain.handle('image:analyze', async (_event, { image, prompt }) => {
+        const win = BrowserWindow.getFocusedWindow() ?? floatingWindow;
+        if (win && !win.isDestroyed()) {
+            analyzeImageWithDeepSeekStream(image, prompt || '请详细描述这张图片的内容，并分析其中的关键信息。', win);
+        }
+    });
     ipcMain.handle('deepseek:analyze', async (_event, payload) => analyzeWithDeepSeek(payload.content, payload.source));
     ipcMain.handle('selection-toolbar:open', async (_event, payload) => dispatchSelectionPayload(payload));
     ipcMain.handle('selection:capture', async () => ({ text: clipboard.readText(), source: '剪贴板' }));
@@ -1078,6 +1193,8 @@ app.whenReady().then(async () => {
     ipcMain.handle('toolbar:colors:get', async () => toolbarColors);
     ipcMain.handle('toolbar:colors:set', async (_event, next) => saveToolbarColors(next));
     ipcMain.handle('toolbar:colors:reset', async () => saveToolbarColors(defaultToolbarColors));
+    ipcMain.handle('theme:get', async () => appTheme);
+    ipcMain.handle('theme:set', async (_event, theme) => saveTheme(theme));
     ipcMain.handle('settings:open', async () => { openSettingsWindow(); return true; });
     ipcMain.handle('toolbar:text:get', async () => lastToolbarText);
     ipcMain.handle('web-toolbar:text:get', async () => ({ text: lastWebText, x: lastWebToolbarRect.x, y: lastWebToolbarRect.y, width: lastWebToolbarRect.width, height: lastWebToolbarRect.height }));
@@ -1140,6 +1257,7 @@ app.whenReady().then(async () => {
     createMainWindow();
     startClipboardWatch();
     await loadToolbarColors();
+    await loadTheme();
     createTray();
     startUIAWatch(); // 方案 B：UI Automation（与剪贴板并行，优先级更高）
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0)

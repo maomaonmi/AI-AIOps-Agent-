@@ -40,3 +40,15 @@ export interface DeepSeekConfig {
     baseUrl: string;
     model: string;
 }
+export interface ImagePayload {
+    base64: string;
+    mimeType: string;
+    width?: number;
+    height?: number;
+    sizeKB?: number;
+}
+export interface ImageAnalysisResult {
+    ok: boolean;
+    text?: string;
+    error?: string;
+}

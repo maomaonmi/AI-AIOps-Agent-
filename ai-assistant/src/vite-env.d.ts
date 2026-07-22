@@ -42,6 +42,12 @@ declare global {
       onToolbarColorsChange: (cb: (colors: Record<string, string>) => void) => (() => void) | undefined;
       onOpenSettings: (cb: () => void) => (() => void) | undefined;
       openSettingsWindow: () => Promise<void>;
+      getTheme: () => Promise<'dark' | 'light'>;
+      setTheme: (theme: 'dark' | 'light') => Promise<'dark' | 'light'>;
+      onThemeChange: (cb: (theme: 'dark' | 'light') => void) => (() => void) | undefined;
+      
+      // 图片分析（多模态）
+      analyzeImage: (image: { base64: string; mimeType: string }, prompt?: string) => Promise<void>;
     };
   }
 }

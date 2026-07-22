@@ -47,3 +47,18 @@ export interface DeepSeekConfig {
   baseUrl: string;
   model: string;
 }
+
+// 图片相关类型
+export interface ImagePayload {
+  base64: string;      // Base64 编码的图片数据（不含 data:image/xxx;base64, 前缀）
+  mimeType: string;    // image/png, image/jpeg, image/webp
+  width?: number;
+  height?: number;
+  sizeKB?: number;
+}
+
+export interface ImageAnalysisResult {
+  ok: boolean;
+  text?: string;       // AI 分析结果
+  error?: string;      // 错误信息
+}

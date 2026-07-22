@@ -78,4 +78,14 @@ contextBridge.exposeInMainWorld('api', {
         return () => ipcRenderer.removeListener('open-settings', handler);
     },
     openSettingsWindow: () => ipcRenderer.invoke('settings:open'),
+    // 主题切换
+    getTheme: () => ipcRenderer.invoke('theme:get'),
+    setTheme: (theme) => ipcRenderer.invoke('theme:set', theme),
+    onThemeChange: (cb) => {
+        const handler = (_event, theme) => cb(theme);
+        ipcRenderer.on('app:theme', handler);
+        return () => ipcRenderer.removeListener('app:theme', handler);
+    },
+    // 图片分析（多模态）
+    analyzeImage: (image, prompt) => ipcRenderer.invoke('image:analyze', { image, prompt }),
 });

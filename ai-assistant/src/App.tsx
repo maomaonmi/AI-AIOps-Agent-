@@ -12,7 +12,7 @@ const defaultAnalysis: FileAnalysis = { summary: '等待导入文件后生成分
 const defaultAi: AiAnalysisResult = { summary: '', risks: [], suggestions: [], highlights: [], actions: [] };
 const defaultConfig: DeepSeekConfig = { apiKey: '', baseUrl: 'https://api.deepseek.com', model: 'deepseek-chat' };
 
-type ChatMessage = { role: 'ai' | 'user'; content: string; timestamp?: number };
+type ChatMessage = { role: 'ai' | 'user'; content: string; timestamp?: number; image?: string };
 type ToolbarMode = 'chat' | 'summary' | 'translate' | 'explain' | 'rewrite' | 'copy' | 'grammar' | 'explainCode' | 'answer';
 const isFloatingMode = new URLSearchParams(window.location.search).get('view') === 'floating';
 const isToolbarMode = new URLSearchParams(window.location.search).get('view') === 'toolbar';
@@ -69,6 +69,11 @@ export default function App() {
   // 对话历史面板
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyList, setHistoryList] = useState<ChatMessage[]>([]);
+  // 主题模式
+  const [theme, setThemeState] = useState<'dark' | 'light'>('dark');
+  // 图片多模态支持
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const [pendingImage, setPendingImage] = useState<string | null>(null);
 
   const pushDebug = (message: string) => {
     setDebugEntries((prev) => [`${new Date().toLocaleTimeString()} ${message}`, ...prev].slice(0, 12));
@@ -106,7 +111,11 @@ export default function App() {
     const unbindColors = window.api?.onToolbarColorsChange?.((c) => { setToolbarColorsState(c); applyToolbarColors(c); });
     // 监听托盘"设置"命令
     const unbindSettings = window.api?.onOpenSettings?.(() => { setShowSettings(true); setColorSettingsOpen(true); });
-    return () => { unbindColors?.(); unbindSettings?.(); };
+    // 加载主题
+    window.api?.getTheme?.().then((t) => { setThemeState(t); document.documentElement.dataset.theme = t; }).catch(() => undefined);
+    // 监听主题变化
+    const unbindTheme = window.api?.onThemeChange?.((t) => { setThemeState(t); document.documentElement.dataset.theme = t; });
+    return () => { unbindColors?.(); unbindSettings?.(); unbindTheme?.(); };
   }, []);
 
   // 悬浮窗启动时加载历史记录
@@ -118,6 +127,16 @@ export default function App() {
         console.log(`[chat-history] loaded ${history.length} messages`);
       }
     }).catch((e) => console.error('[chat-history] load error:', e));
+  }, [isFloatingMode]);
+
+  // 图片多模态支持：在悬浮窗模式下监听粘贴事件
+  useEffect(() => {
+    if (!isFloatingMode) return;
+
+    document.addEventListener('paste', handlePasteImage);
+    return () => {
+      document.removeEventListener('paste', handlePasteImage);
+    };
   }, [isFloatingMode]);
 
   // 监听流式响应
@@ -330,6 +349,96 @@ export default function App() {
     setChatInput('');
     // 流式调用
     window.api?.deepSeekStream?.({ content: text, source: '用户对话' });
+  };
+
+  // 图片多模态支持：粘贴图片处理
+  const handlePasteImage = async (event: ClipboardEvent) => {
+    const items = event.clipboardData?.items;
+    if (!items) return;
+
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        event.preventDefault();
+        const file = item.getAsFile();
+        if (!file) continue;
+
+        // 转换为 Base64
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          const base64 = e.target?.result as string;
+          const mimeType = file.type;
+
+          // 添加用户消息（带图片）
+          const userMsg: ChatMessage = {
+            role: 'user',
+            content: '[图片]',
+            image: base64,
+            timestamp: Date.now()
+          };
+          setMessages((prev) => [...prev, userMsg]);
+
+          // 调用后端 AI 分析接口（流式，结果通过 onStreamChunk 回调返回）
+          if (window.api?.analyzeImage) {
+            try {
+              pushDebug(`debug: analyzing image type=${mimeType}`);
+              // 添加一条空的 AI 消息占位，后续通过 onStreamChunk 实时更新
+              setMessages((prev) => [...prev, { role: 'ai', content: '正在分析图片...' }]);
+              await window.api.analyzeImage({ base64, mimeType }, '请详细描述这张图片的内容，并分析其中的关键信息。');
+            } catch (err) {
+              const errorMsg = err instanceof Error ? err.message : String(err);
+              setMessages((prev) => [...prev, { role: 'ai', content: `分析出错：${errorMsg}` }]);
+            }
+          } else {
+            setMessages((prev) => [...prev, { role: 'ai', content: '当前环境不支持图片分析功能' }]);
+          }
+        };
+        reader.readAsDataURL(file);
+        break;
+      }
+    }
+  };
+
+  // 图片多模态支持：文件选择处理
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !file.type.startsWith('image/')) {
+      pushDebug('debug: invalid file type selected');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const base64 = e.target?.result as string;
+      const mimeType = file.type;
+
+      // 添加用户消息（带图片）
+      const userMsg: ChatMessage = {
+        role: 'user',
+        content: file.name,
+        image: base64,
+        timestamp: Date.now()
+      };
+      setMessages((prev) => [...prev, userMsg]);
+
+      // 调用后端 AI 分析接口（流式，结果通过 onStreamChunk 回调返回）
+      if (window.api?.analyzeImage) {
+        try {
+          pushDebug(`debug: analyzing image file=${file.name} type=${mimeType}`);
+          // 添加一条空的 AI 消息占位，后续通过 onStreamChunk 实时更新
+          setMessages((prev) => [...prev, { role: 'ai', content: '正在分析图片...' }]);
+          await window.api.analyzeImage({ base64, mimeType }, '请详细描述这张图片的内容，并分析其中的关键信息。');
+        } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          setMessages((prev) => [...prev, { role: 'ai', content: `分析出错：${errorMsg}` }]);
+        }
+      } else {
+        setMessages((prev) => [...prev, { role: 'ai', content: '当前环境不支持图片分析功能' }]);
+      }
+    };
+    reader.readAsDataURL(file);
+
+    // 重置 input 值，允许重复选择同一文件
+    event.target.value = '';
   };
 
   const sendClipboard = async () => {
@@ -778,7 +887,7 @@ export default function App() {
                 background: historyOpen ? 'rgba(99,102,241,.3)' : 'transparent',
                 border: '1px solid rgba(148,163,184,.2)',
                 borderRadius: 6,
-                color: '#e2e8f0',
+                color: 'var(--text-primary)',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -788,123 +897,86 @@ export default function App() {
               <span>🕐</span>
               <span style={{ fontSize: 11 }}>历史</span>
             </button>
+            <button
+              className="icon-button"
+              title="切换昼夜主题"
+              onClick={async () => {
+                const next = theme === 'dark' ? 'light' : 'dark';
+                setThemeState(next);
+                document.documentElement.dataset.theme = next;
+                await window.api?.setTheme?.(next);
+              }}
+              style={{
+                padding: '6px 10px',
+                fontSize: '13px',
+                background: 'transparent',
+                border: '1px solid rgba(148,163,184,.2)',
+                borderRadius: 6,
+                color: 'var(--text-primary)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+              }}
+            >
+              <span>{theme === 'dark' ? '☀️' : '🌙'}</span>
+              <span style={{ fontSize: 11 }}>{theme === 'dark' ? '日间' : '夜间'}</span>
+            </button>
             <button className="primary-button" style={{ padding: '8px 14px', fontSize: '13px' }} onClick={() => window.api?.openSettingsWindow?.()}>设置</button>
           </div>
 
           {/* 对话历史面板 */}
           {historyOpen && (
-            <section style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            maxHeight: '60vh',
-            background: 'rgba(15,23,42,.98)',
-            border: '1px solid rgba(148,163,184,.15)',
-            borderRadius: '0 0 16px 16px',
-            boxShadow: '0 16px 48px rgba(0,0,0,.4)',
-            zIndex: 100,
-            display: 'flex',
-            flexDirection: 'column',
-            animation: 'slideDown .15s ease',
-          }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '12px 16px',
-              borderBottom: '1px solid rgba(148,163,184,.12)',
-              flexShrink: 0,
-            }}>
-              <h3 style={{ margin: 0, fontSize: '14px', color: '#e2e8f0' }}>对话历史 ({historyList.length})</h3>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={async () => {
-                    if (confirm('确定要清除所有对话历史吗？')) {
-                      await window.api?.clearChatHistory?.();
-                      setHistoryList([]);
-                      setMessages([{ role: 'ai', content: '你好，我是悬浮 AI，可以接收文件内容或选中文本并帮你分析。' }]);
-                    }
-                  }}
-                  style={{
-                    padding: '4px 10px',
-                    fontSize: '12px',
-                    background: 'rgba(239,68,68,.15)',
-                    border: '1px solid rgba(239,68,68,.25)',
-                    borderRadius: 6,
-                    color: '#fca5a5',
-                    cursor: 'pointer',
-                  }}
-                >
-                  清除历史
-                </button>
-                <button
-                  onClick={() => setHistoryOpen(false)}
-                  style={{
-                    width: 24,
-                    height: 24,
-                    border: 'none',
-                    borderRadius: 6,
-                    background: 'rgba(148,163,184,.1)',
-                    color: '#94a3b8',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                  }}
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-            <div style={{
-              flex: 1,
-              overflow: 'auto',
-              padding: '8px',
-            }}>
-              {historyList.length === 0 ? (
-                <p style={{ textAlign: 'center', color: '#94a3b8', padding: 20, fontSize: 13 }}>暂无对话历史</p>
-              ) : (
-                <div style={{ display: 'grid', gap: 6 }}>
-                  {historyList.map((msg, i) => (
-                    <button
-                      key={i}
-                      onClick={() => {
-                        // 点击历史项加载到对话
-                        setMessages(historyList.slice(0, i + 1));
-                        setHistoryOpen(false);
-                      }}
-                      style={{
-                        textAlign: 'left',
-                        padding: '10px 12px',
-                        border: 'none',
-                        borderRadius: 8,
-                        background: msg.role === 'ai' ? 'rgba(99,102,241,.1)' : 'rgba(148,163,184,.08)',
-                        color: '#e2e8f0',
-                        cursor: 'pointer',
-                        transition: 'background .15s',
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = msg.role === 'ai' ? 'rgba(99,102,241,.2)' : 'rgba(148,163,184,.15)'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = msg.role === 'ai' ? 'rgba(99,102,241,.1)' : 'rgba(148,163,184,.08)'}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <strong style={{ fontSize: 12, color: msg.role === 'ai' ? '#a5b4fc' : '#cbd5e1' }}>
-                          {msg.role === 'ai' ? 'AI' : '你'}
-                        </strong>
-                        {msg.timestamp && (
-                          <span style={{ fontSize: 10, color: '#64748b' }}>
-                            {new Date(msg.timestamp).toLocaleString()}
-                          </span>
-                        )}
-                      </div>
-                      <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, color: '#cbd5e1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {msg.content.slice(0, 100)}{msg.content.length > 100 ? '…' : ''}
-                      </p>
-                    </button>
-                  ))}
+            <section className="history-panel">
+              <div className="history-panel-header">
+                <h3>对话历史 ({historyList.length})</h3>
+                <div className="history-panel-actions">
+                  <button
+                    className="history-clear-btn"
+                    onClick={async () => {
+                      if (confirm('确定要清除所有对话历史吗？')) {
+                        await window.api?.clearChatHistory?.();
+                        setHistoryList([]);
+                        setMessages([{ role: 'ai', content: '你好，我是悬浮 AI，可以接收文件内容或选中文本并帮你分析。' }]);
+                      }
+                    }}
+                  >
+                    清除历史
+                  </button>
+                  <button className="history-close-btn" onClick={() => setHistoryOpen(false)}>×</button>
                 </div>
-              )}
-            </div>
-          </section>
-        )}
+              </div>
+              <div className="history-panel-body">
+                {historyList.length === 0 ? (
+                  <p className="history-empty">暂无对话历史</p>
+                ) : (
+                  <div className="history-list">
+                    {historyList.map((msg, i) => (
+                      <button
+                        key={i}
+                        className={`history-item ${msg.role}`}
+                        onClick={() => {
+                          // 点击历史项加载到对话
+                          setMessages(historyList.slice(0, i + 1));
+                          setHistoryOpen(false);
+                        }}
+                      >
+                        <div className="history-item-meta">
+                          <strong>{msg.role === 'ai' ? 'AI' : '你'}</strong>
+                          {msg.timestamp && (
+                            <span>{new Date(msg.timestamp).toLocaleString()}</span>
+                          )}
+                        </div>
+                        <p className="history-item-text">
+                          {msg.content.slice(0, 100)}{msg.content.length > 100 ? '…' : ''}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
         </header>
 
         {toolbar.visible ? (
@@ -997,10 +1069,23 @@ export default function App() {
           <div className="popup-section chat-messages">{messages.map((message, index) => (
             <div key={`${message.role}-${index}`} className={`chat-bubble ${message.role}`}>
               <strong>{message.role === 'ai' ? 'AI' : '你'}</strong>
+              {/* 图片消息渲染 */}
+              {message.image && <img src={message.image} alt="用户发送的图片" style={{ maxWidth: '100%', borderRadius: '8px', marginBottom: '8px' }} />}
               {message.role === 'ai' ? renderMd(message.content) : <p>{message.content}</p>}
             </div>
           ))}</div>
           <footer className="floating-input-bar">
+            {/* 隐藏的文件输入控件 */}
+            <input ref={imageInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileSelect} />
+            {/* 图片按钮 */}
+            <button
+              className="popup-action"
+              style={{ padding: '8px 12px', fontSize: '13px' }}
+              onClick={() => imageInputRef.current?.click()}
+              title="选择图片文件"
+            >
+              📷 图片
+            </button>
             <input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="输入问题，回车或点击发送" onKeyDown={(event) => { if (event.key === 'Enter') sendChat(); }} />
             <button className="popup-action" onClick={sendChat}>发送</button>
           </footer>
